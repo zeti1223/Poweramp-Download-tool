@@ -182,7 +182,7 @@ class MusicDownloaderApp(App):
             "max_parallel": self.cfg_max_parallel
         }
         with open(CONFIG_FILE, "w") as f:
-            json.dump(data, f)
+            json.dump(data, f, indent=4)
         self.log_msg("Settings saved to local config.", "UI")
         self.notify("Configuration saved!")
 
