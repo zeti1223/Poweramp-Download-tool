@@ -46,7 +46,7 @@ def youtube_get_initial(link):
                         "thumbnails") is not None else None
                     track_dict["youtube_id"] = track["videoId"]
                     track_dict["track_number"] = i+1
-                    track_dict["status"] = "WAITING"
+                    track_dict["status"] = "waiting"
                     return_dict["tracks"].append(track_dict)
 
                 except Exception as e:

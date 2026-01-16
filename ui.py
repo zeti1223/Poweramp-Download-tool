@@ -173,16 +173,15 @@ class MusicDownloaderApp(App):
     def _refresh_table(self):
         table = self.query_one(DataTable)
         table.clear()
-        grouped = {}
-        for item in self.download_queue:
-            folder = item['folder'] if item['folder'] else "Egyéb / Nincs mappa"
-            if folder not in grouped: grouped[folder] = []
-            grouped[folder].append(item)
-        for folder, items in grouped.items():
-            table.add_row("", "", f"[bold yellow]📁 {folder}[/]", "", key=f"hdr_{folder}")
-            for item in items:
-                status_styled = {"done": "[green]DONE[/]", "error": "[red]ERROR[/]", "working": "[blue]WORK[/]", "waiting": "WAIT"}.get(item['status'], item['status'])
-                table.add_row(str(item['id']), status_styled, item['display_name'], folder)
+
+        for list in self.download_queue:
+            table.add_row("", "", f"[bold yellow]📁 {list['title']}[/]", "", key=f"hdr_{list['title']}")
+
+            for track in list['tracks']:
+                status_styled = {"done": "[green]DONE[/]", "error": "[red]ERROR[/]", "working": "[blue]WORK[/]",
+                                 "waiting": "WAIT"}.get(track['status'], track['status'])
+                table.add_row(str(track['track_number']), status_styled, f"{track['artists'][0]} - {track['title']}" , list['title'])
+
 
     def toggle_pause(self):
         self.pause_requested = not self.pause_requested
@@ -212,11 +211,10 @@ class MusicDownloaderApp(App):
 
     def process_input(self, link):
         self.log_msg(f"Analyzing: {link}", "ANALYZER")
-        clean_link = link.split('?')[0]
-        domain = clean_link.strip("https://").strip("http://").split("/")[0]
+        domain = link.strip("https://").strip("http://").split("/")[0]
         try:
             if "youtube.com" in domain or "youtu.be" in domain:
-                result_dict = youtube_get_initial(clean_link)
+                result_dict = youtube_get_initial(link)
                 self.download_queue.append(result_dict)
             if "soundcloud.com" in domain:
                 pass
