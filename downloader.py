@@ -1,6 +1,70 @@
 import subprocess
 import json
 import re
+import ytmusicapi
+import ping3
+
+
+def check_network():
+    is_online = ping3.ping("1.1.1.1")
+    return is_online
+
+
+def spotify_get_initial(link):
+    pass
+
+def youtube_get_initial(link):
+    try:
+        if "list" not in link:
+            raise ValueError("Not Playlist Link!")
+        youtube_id = link.split("/")[-1].split("?list=")[-1]
+        yt_music_api = ytmusicapi.YTMusic()
+        if not check_network():
+            raise ConnectionError("No internet connection!")
+        if youtube_id is None:
+            raise ValueError("No youtube id given!")
+        if len(youtube_id) != 34:
+            ValueError("Invalid youtube id given!")
+
+        try:
+            data = yt_music_api.get_playlist(playlistId=youtube_id, limit=None)
+            return_dict = {}
+
+            return_dict["tracks"] = []
+            for i,track in enumerate(data["tracks"]):
+                print(track)
+                try:
+                    track_dict = {}
+                    track_dict["title"] = track.get("title", "Unknown title")
+                    track_dict["artists"] = [i.get("name", "Unknown artist") for i in track.get("artists")] if track.get(
+                        "artists") is not None else ["Unknown artist"]
+
+                    track_dict["album"] = track.get("album", {}).get("name", "Unknown album") if not track["album"] is None else "Unknown album"
+
+                    track_dict["duration_seconds"] = track.get("duration", 0)
+                    track_dict["thumbnail"] = track.get("thumbnails")[0]["url"].split("=")[0] + "=w600-h600" if track.get(
+                        "thumbnails") is not None else None
+                    track_dict["youtube_id"] = track["videoId"]
+                    track_dict["track_number"] = i+1
+                    track_dict["status"] = "WAITING"
+                    return_dict["tracks"].append(track_dict)
+
+                except Exception as e:
+                    print(e)
+            try:
+                return_dict["title"] = data.get("title", "Unknwon Title")
+                return_dict["thumbnail"] = data.get("thumbnails", [])[-1].get("url", None)
+            except Exception as e:
+                print(e)
+
+            return return_dict
+        except Exception as e:
+            raise e
+    except Exception as e:
+        raise e
+
+def soundcloud_get_initial(link):
+    pass
 
 def fetch_info(link):
     """Lekéri az információkat a linkről yt-dlp segítségével."""

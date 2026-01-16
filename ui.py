@@ -15,7 +15,7 @@ from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent,
 from consts import CONFIG_FILE
 from metadata import MetadataManager
 from playlist import update_folder_playlist
-from downloader import fetch_info, get_spotify_tracks, run_yt_dlp
+from downloader import *
 
 class MusicDownloaderApp(App):
     CSS = """
@@ -216,7 +216,8 @@ class MusicDownloaderApp(App):
         domain = clean_link.strip("https://").strip("http://").split("/")[0]
         try:
             if "youtube.com" in domain or "youtu.be" in domain:
-                pass
+                result_dict = youtube_get_initial(clean_link)
+                self.download_queue.append(result_dict)
             if "soundcloud.com" in domain:
                 pass
             if "spotify.com" in domain:
