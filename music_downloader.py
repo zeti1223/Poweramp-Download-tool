@@ -98,7 +98,7 @@ class MusicDownloaderApp(App):
         yield Header()
         with TabbedContent():
             with TabPane("Queue & Download", id="tab_queue"):
-                yield Input(placeholder="Spotify/YouTube link or search query...", id="link_entry")
+                yield Input(placeholder="Paste a link or search query...", id="link_entry")
                 with Horizontal(classes="controls"):
                     yield Button("Add", id="btn_add", variant="primary")
                     yield Button("Start All", id="btn_start", variant="success")
@@ -350,6 +350,26 @@ class MusicDownloaderApp(App):
                     self.item_counter += 1
                     self.log_msg(f"Added YouTube video: {title}", "SUCCESS")
             except Exception as e: self.log_msg(f"YouTube analyzer error: {e}", "ERROR")
+
+        elif "soundcloud.com" in link or "on.soundcloud.com" in link:
+            try:
+                cmd = ["yt-dlp", "--flat-playlist", "--dump-single-json", link]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                data = json.loads(res.stdout)
+                if 'entries' in data:
+                    f_name = re.sub(r'[\\/*?:"<>|]', "", data.get('title', 'SC_Playlist'))
+                    for entry in data['entries']:
+                        title = entry.get('title', 'Unknown Title')
+                        url = entry.get('url') or entry.get('webpage_url') or title
+                        self.download_queue.append({"query": url, "display_name": title, "folder": f_name, "status": "waiting", "id": self.item_counter})
+                        self.item_counter += 1
+                    self.log_msg(f"Added SoundCloud playlist: {f_name}", "SUCCESS")
+                else:
+                    title = data.get('title', link)
+                    self.download_queue.append({"query": link, "display_name": title, "folder": None, "status": "waiting", "id": self.item_counter})
+                    self.item_counter += 1
+                    self.log_msg(f"Added SoundCloud track: {title}", "SUCCESS")
+            except Exception as e: self.log_msg(f"SoundCloud analyzer error: {e}", "ERROR")
 
         else: # Generic search
             self.download_queue.append({"query": link, "display_name": link, "folder": None, "status": "waiting", "id": self.item_counter})
