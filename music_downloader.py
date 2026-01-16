@@ -49,14 +49,15 @@ class MusicDownloaderApp(App):
     }
     """
 
-    TITLE = "Music Downloader Pro (TUI)"
+    TITLE = "Poweramp Music Downloader"
     BINDINGS = [("q", "quit", "Kilépés")]
 
     def __init__(self):
         super().__init__()
 
         # Logic variables
-        self.current_process = None
+        self.active_processes = []
+        self.process_lock = threading.Lock()
         self.stop_requested = False
         self.pause_requested = False
         self.download_queue = []
@@ -68,6 +69,7 @@ class MusicDownloaderApp(App):
         self.cfg_sp_id = ""
         self.cfg_sp_sec = ""
         self.cfg_quality = "MP3 320kbps"
+        self.cfg_max_parallel = "1"
 
         self.quality_map = {
             "MP3 128kbps": {"format": "mp3", "bitrate": "128K"},
@@ -113,6 +115,10 @@ class MusicDownloaderApp(App):
                 options = [(k, k) for k in self.quality_map.keys()]
                 yield Select(options, value=self.cfg_quality, id="select_quality", allow_blank=False, classes="settings_field")
                 
+                yield Label("Max Parallel Downloads:", classes="settings_field")
+                parallel_options = [(str(i), str(i)) for i in range(1, 6)]
+                yield Select(parallel_options, value=self.cfg_max_parallel, id="select_parallel", allow_blank=False, classes="settings_field")
+                
                 yield Button("Save Settings", id="btn_save", variant="primary")
         yield Footer()
 
@@ -145,6 +151,7 @@ class MusicDownloaderApp(App):
                     self.cfg_sp_id = data.get("sp_id", "")
                     self.cfg_sp_sec = data.get("sp_sec", "")
                     self.cfg_quality = data.get("quality", "MP3 320kbps")
+                    self.cfg_max_parallel = data.get("max_parallel", "1")
             except: pass
 
     def save_settings(self):
@@ -152,12 +159,14 @@ class MusicDownloaderApp(App):
         self.cfg_sp_id = self.query_one("#input_sp_id", Input).value.strip()
         self.cfg_sp_sec = self.query_one("#input_sp_sec", Input).value.strip()
         self.cfg_quality = self.query_one("#select_quality", Select).value
+        self.cfg_max_parallel = self.query_one("#select_parallel", Select).value
 
         data = {
             "path": self.cfg_path,
             "sp_id": self.cfg_sp_id,
             "sp_sec": self.cfg_sp_sec,
-            "quality": self.cfg_quality
+            "quality": self.cfg_quality,
+            "max_parallel": self.cfg_max_parallel
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f)
@@ -194,7 +203,9 @@ class MusicDownloaderApp(App):
 
     def abort_process(self):
         self.stop_requested = True
-        if self.current_process: self.current_process.terminate()
+        with self.process_lock:
+            for proc in self.active_processes:
+                if proc.poll() is None: proc.terminate()
         self.is_downloading = False
         self.query_one("#speed_label", Label).update("Aborted | Speed: 0 KiB/s | Progress: 0%")
         self.log_msg("Download process aborted.", "SYSTEM")
@@ -307,29 +318,52 @@ class MusicDownloaderApp(App):
     def download_loop(self):
         quality_cfg = self.quality_map[self.cfg_quality]
         base_path = Path(self.cfg_path)
+        active_threads = []
 
-        for item in self.download_queue:
-            while self.pause_requested and not self.stop_requested:
-                time.sleep(0.5)
+        while True:
+            active_threads = [t for t in active_threads if t.is_alive()]
 
             if self.stop_requested: break
-            if item["status"] == "done": continue
 
-            item["status"] = "working"
-            self.refresh_queue_ui()
+            waiting_items = [i for i in self.download_queue if i["status"] == "waiting"]
+            working_items = [i for i in self.download_queue if i["status"] == "working"]
 
-            save_dir = base_path / item['folder'] if item['folder'] else base_path
-            save_dir.mkdir(parents=True, exist_ok=True)
+            if not waiting_items and not working_items and not active_threads:
+                break
 
-            self.log_msg(f"Downloading: {item['display_name']}", "PROCESS")
-            success = self.run_yt_dlp(item['query'], quality_cfg, save_dir)
+            if self.pause_requested:
+                time.sleep(0.5)
+                continue
 
-            item["status"] = "done" if success else "error"
-            self.refresh_queue_ui()
+            max_p = int(self.cfg_max_parallel)
+            if waiting_items and len(active_threads) < max_p:
+                item = waiting_items[0]
+                item["status"] = "working"
+                self.refresh_queue_ui()
+                
+                t = threading.Thread(target=self.process_single_item, args=(item, quality_cfg, base_path))
+                t.start()
+                active_threads.append(t)
+                continue
+
+            time.sleep(0.5)
+
+        for t in active_threads:
+            t.join()
 
         self.run_post_processing()
         self.is_downloading = False
         self.log_msg("All tasks completed.", "SYSTEM")
+
+    def process_single_item(self, item, quality_cfg, base_path):
+        save_dir = base_path / item['folder'] if item['folder'] else base_path
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        self.log_msg(f"Downloading: {item['display_name']}", "PROCESS")
+        success = self.run_yt_dlp(item['query'], quality_cfg, save_dir)
+
+        item["status"] = "done" if success else "error"
+        self.refresh_queue_ui()
 
     def run_yt_dlp(self, query, cfg, out_dir):
         url = query if query.startswith("http") else f"ytsearch1:{query}"
@@ -345,7 +379,8 @@ class MusicDownloaderApp(App):
             cmd.extend(["--audio-quality", cfg["bitrate"]])
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        self.current_process = proc
+        with self.process_lock:
+            self.active_processes.append(proc)
         for line in proc.stdout:
             if self.stop_requested: break
             match = re.search(r'\[download\]\s+(\d+\.\d+)%.*at\s+([\d\.]+\w+/s)', line)
@@ -353,6 +388,10 @@ class MusicDownloaderApp(App):
                 p, s = match.groups()
                 self.call_from_thread(self.query_one("#speed_label", Label).update, f"Speed: {s} | Progress: {p}%")
         proc.wait()
+        
+        with self.process_lock:
+            if proc in self.active_processes:
+                self.active_processes.remove(proc)
         return proc.returncode == 0
 
     def run_post_processing(self):
