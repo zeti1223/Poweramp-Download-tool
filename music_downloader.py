@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import threading
+import shutil
 import json
 import re
 import datetime
@@ -12,7 +13,7 @@ from pathlib import Path
 try:
     from textual.app import App, ComposeResult
     from textual.containers import Horizontal
-    from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent, TabPane, Log, Select, DataTable
+    from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent, TabPane, Log, Select, DataTable, ProgressBar
 except ImportError:
     print("Hiba: A 'textual' könyvtár hiányzik. Telepítsd: pip install textual")
     exit(1)
@@ -46,6 +47,16 @@ class MusicDownloaderApp(App):
     }
     .settings_field {
         margin-bottom: 1;
+    }
+    .status_bar {
+        height: auto;
+        layout: horizontal;
+        align: left middle;
+        margin: 1 0;
+    }
+    #overall_progress {
+        width: 1fr;
+        margin-left: 2;
     }
     """
 
@@ -95,7 +106,9 @@ class MusicDownloaderApp(App):
                     yield Button("Abort", id="btn_abort", variant="error")
                     yield Button("Clear List", id="btn_clear")
                 
-                yield Label("Ready | Speed: 0 KiB/s | Progress: 0%", id="speed_label")
+                with Horizontal(classes="status_bar"):
+                    yield Label("Ready | Speed: 0 KiB/s | Progress: 0%", id="speed_label")
+                    yield ProgressBar(total=100, show_eta=True, id="overall_progress")
                 yield DataTable(id="queue_table")
 
             with TabPane("Detailed Log", id="tab_log"):
@@ -184,15 +197,53 @@ class MusicDownloaderApp(App):
     def refresh_queue_ui(self):
         if threading.get_ident() == self._thread_id:
             self._refresh_table()
+            self._update_progress_bar()
         else:
             self.call_from_thread(self._refresh_table)
+            self.call_from_thread(self._update_progress_bar)
+
+    def _update_progress_bar(self):
+        bar = self.query_one("#overall_progress", ProgressBar)
+        total = len(self.download_queue)
+        if total == 0:
+            bar.update(progress=0, total=100)
+            return
+        
+        done_count = len([i for i in self.download_queue if i['status'] in ('done', 'error')])
+        bar.update(total=total, progress=done_count)
 
     def _refresh_table(self):
         table = self.query_one(DataTable)
         table.clear()
+        
+        # Group items by folder
+        grouped = {}
         for item in self.download_queue:
-            folder_str = item['folder'] if item['folder'] else "-"
-            table.add_row(str(item['id']), item['status'].upper(), item['display_name'], folder_str)
+            folder = item['folder'] if item['folder'] else "Egyéb / Nincs mappa"
+            if folder not in grouped:
+                grouped[folder] = []
+            grouped[folder].append(item)
+
+        # Add rows with headers
+        for folder, items in grouped.items():
+            # Add a "Header" row for the folder
+            table.add_row("", "", f"[bold yellow]📁 {folder}[/]", "", key=f"hdr_{folder}")
+            
+            for item in items:
+                status_styled = item['status'].upper()
+                if item['status'] == 'done':
+                    status_styled = "[green]DONE[/]"
+                elif item['status'] == 'error':
+                    status_styled = "[red]ERROR[/]"
+                elif item['status'] == 'working':
+                    status_styled = "[blue]WORK[/]"
+                
+                table.add_row(
+                    str(item['id']), 
+                    status_styled, 
+                    item['display_name'], 
+                    folder
+                )
 
     def toggle_pause(self):
         self.pause_requested = not self.pause_requested
