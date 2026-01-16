@@ -110,8 +110,8 @@ class MusicDownloaderApp(App):
                     yield Button("Clear List", id="btn_clear")
                 
                 with Horizontal(classes="status_bar"):
-                    yield Label("Ready | Speed: 0 KiB/s | Progress: 0%  ", id="speed_label")
-                    yield Label("Overall progress:", id="overall_progress_label")
+                    yield Label("Ready | Speed: 0 KiB/s | Progress: 0%", id="speed_label")                
+                    yield Label("   Overall progress:", id="overall_progress_label")
                     yield ProgressBar(total=100, show_eta=True, id="overall_progress")
                 yield DataTable(id="queue_table")
 
