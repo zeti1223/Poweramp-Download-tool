@@ -1,8 +1,4 @@
-import os
-import threader
 import datetime
-import time
-import json
 from pathlib import Path
 
 from rich.text import Text
@@ -12,12 +8,10 @@ from textual.containers import Horizontal
 from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent, TabPane, RichLog, Select, DataTable, \
     ProgressBar, Switch
 
-from consts import CONFIG_FILE
-from metadata import MetadataManager
-from playlist import update_folder_playlist
-from downloader import *
-from threading import *
-
+from src.consts import CONFIG_FILE
+from src.metadata import MetadataManager
+from src.downloader import *
+from src.threader import *
 
 class MusicDownloaderApp(App):
     CSS = """
@@ -69,6 +63,9 @@ class MusicDownloaderApp(App):
             "FLAC": {"format": "flac", "bitrate": "0"},
         }
         self.load_settings()
+
+        self.thread_system = QueueSystem(max_threads=int(self.cfg_max_parallel))
+
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -337,46 +334,29 @@ class MusicDownloaderApp(App):
         self.refresh_queue_ui()
         self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
 
+    def change_state(self,state,q_num,q_s_num):
+        if q_s_num:
+            self.download_queue[q_num][q_s_num]["state"] = state
+        else:
+            self.download_queue[q_num]["state"] = state
+
+    def _download_wrapper(self,queue_num,queue_sub_num):
+        if queue_sub_num:
+            pass
+        elif queue_num is None:
+            self.change_state("downloading",queue_num,queue_sub_num)
+
     def start_downloads(self):
-        if not self.download_queue or self.is_downloading: return
-        self.is_downloading = True
-        self.stop_requested = False
-        threading.Thread(target=self.download_loop, daemon=True).start()
+        if self.download_queue:
+            raise RuntimeError("The program is already downloading!")
 
-    def download_loop(self):
-        quality_cfg = self.quality_map[self.cfg_quality]
-        base_path = Path(self.cfg_path)
-        active_threads = []
+        job_queue = []
 
-        while True:
-            if self.stop_requested: break
-
-            target_track = None
-            target_folder = None
-
-            for folder in self.download_queue:
-                for track in folder['tracks']:
-                    if track['status'] == "waiting":
-                        target_track = track
-                        target_folder = folder
-                        break
-                if target_track: break
-
-            active_threads = [t for t in active_threads if t.is_alive()]
-
-            if not target_track and not active_threads: break
-
-            if self.pause_requested:
-                time.sleep(0.5)
-                continue
-
-            if target_track and len(active_threads) < int(self.cfg_max_parallel):
-                target_track["status"] = "working"
-                self.refresh_queue_ui()
-                continue
-
-            time.sleep(0.5)
-
-        for t in active_threads: t.join()
-        self.is_downloading = False
-        self.log_msg("All tasks finished.", "SYSTEM")
+        for queue_num,data in enumerate(self.download_queue):
+            if data["item-type"] == "track":
+                if data["status"] == "waiting":
+                    job_queue.append(lambda q_num=queue_num,d=data: self._download_wrapper(q_num,None,d))
+            if data["item-type"] == "playlist":
+                for queue_sub_num, data2 in enumerate(data):
+                    if data["status"] == "waiting":
+                        job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num, d=data: self._download_wrapper(q_num, queue_sub_num, d))

@@ -236,7 +236,7 @@ def spotify_get_initial(link):
         if spotify_id is None:
             raise ValueError("Invalid spotify id given!")
 
-        with open("config.json", "r") as f:config = json.load(f)
+        with open("../config.json", "r") as f:config = json.load(f)
 
         if config["sp_id"] == "" or config["sp_sec"] == "":
             raise ValueError("No spotify tokens given!")
@@ -473,7 +473,7 @@ def download_single(song_dict:dict,folder_name:str = None):
 
     # Figure out folder name
 
-    with open("config.json","r") as f:
+    with open("../config.json", "r") as f:
         config = json.load(f)
 
     if folder_name is None:output_folder = config["path"]
@@ -490,11 +490,3 @@ def download_single(song_dict:dict,folder_name:str = None):
     # Add cover
     cover_file = download_file(song_dict["thumbnail"], ".TEMP")
     add_cover_art(ffmpeg_out, cover_file)
-
-
-
-
-
-
-
-
