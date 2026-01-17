@@ -2,6 +2,7 @@ import sys
 import subprocess
 import os
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 def install_and_restart():
     print("Detecting missing dependencies. Installing...")
@@ -17,11 +18,11 @@ def install_and_restart():
 
 try:
     import requests
-    import musicbrainzngs
     import mutagen
     import textual
     from ui import MusicDownloaderApp
-except ImportError:
+except ImportError as e:
+    print(f"CRITICAL IMPORT ERROR: {e}")
     install_and_restart()
 
 if __name__ == "__main__":
