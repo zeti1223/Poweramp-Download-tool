@@ -31,7 +31,6 @@ class MusicDownloaderApp(App):
 
     TITLE = "Music Downloader"
     BINDINGS = [("q", "quit", "Exit"), ("ctrl+v", "paste_link", "Paste")]
-    CONFIG_FILE = "src/config.json"
 
     def __init__(self):
         super().__init__()
@@ -167,7 +166,7 @@ class MusicDownloaderApp(App):
                     self.cfg_sp_sec = data.get("sp_sec", "")
                     self.cfg_quality = data.get("quality", "MP3 320kbps")
                     self.cfg_max_parallel = data.get("max_parallel", "1")
-                    self.cfg_template = data.get("filename_template", "")
+                    self.cfg_template = data.get("filename_template", "$artist$ - $title$")
                     self.cfg_dev_mode = data.get("dev_mode", False)
             except: pass
 
