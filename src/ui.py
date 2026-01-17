@@ -9,8 +9,8 @@ from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent,
     ProgressBar, Switch
 
 from src.consts import CONFIG_FILE
-from src.metadata import MetadataManager
 from src.downloader import *
+from src.playlist import *
 from src.threader import *
 
 class MusicDownloaderApp(App):
@@ -30,6 +30,7 @@ class MusicDownloaderApp(App):
 
     TITLE = "Music Downloader"
     BINDINGS = [("q", "quit", "Exit"), ("ctrl+v", "paste_link", "Paste")]
+    CONFIG_FILE = "../config.json"
 
     def __init__(self):
         super().__init__()
@@ -40,7 +41,6 @@ class MusicDownloaderApp(App):
         self.download_queue = []
         self.is_downloading = False
         self.item_counter = 0
-        self.meta_manager = MetadataManager()
         self.log_history = []
 
         self.expanded_folders = set()
@@ -342,9 +342,22 @@ class MusicDownloaderApp(App):
 
     def _download_wrapper(self,queue_num,queue_sub_num):
         if queue_sub_num:
-            pass
+            self.change_state("downloading", queue_num, queue_sub_num)
+            callback = lambda state: self.change_state(state, queue_num, queue_sub_num)
+            folder_name = sanitize(self.download_queue[queue_num]["title"])
+            try:
+                download_single(song_dict=self.download_queue[queue_num][queue_sub_num],folder_name=folder_name, callback=callback)
+            except Exception as e:
+                self.change_state("error", queue_num, queue_sub_num)
+                raise e
         elif queue_num is None:
             self.change_state("downloading",queue_num,queue_sub_num)
+            callback = lambda state: self.change_state(state,queue_num,queue_sub_num)
+            try:
+                download_single(song_dict=self.download_queue[queue_num],callback=callback)
+            except Exception as e:
+                self.change_state("error", queue_num, queue_sub_num)
+                raise e
 
     def start_downloads(self):
         if self.download_queue:
@@ -355,8 +368,10 @@ class MusicDownloaderApp(App):
         for queue_num,data in enumerate(self.download_queue):
             if data["item-type"] == "track":
                 if data["status"] == "waiting":
-                    job_queue.append(lambda q_num=queue_num,d=data: self._download_wrapper(q_num,None,d))
+                    job_queue.append(lambda q_num=queue_num: self._download_wrapper(q_num,None))
             if data["item-type"] == "playlist":
                 for queue_sub_num, data2 in enumerate(data):
-                    if data["status"] == "waiting":
-                        job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num, d=data: self._download_wrapper(q_num, queue_sub_num, d))
+                    if data["status"] == "waiting" or data["status"] == "error":
+                        job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num: self._download_wrapper(q_num, queue_sub_num))
+
+

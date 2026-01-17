@@ -2,7 +2,6 @@ import subprocess
 import json
 import re
 import yt_dlp
-import uuid
 import ytmusicapi
 import ping3
 import spotipy
@@ -25,7 +24,7 @@ quality_map = {
     "MP3 320kbps": {"format": "mp3", "bitrate": "320K"},
     "OGG": {"format": "vorbis", "bitrate": "192K"},
     "M4A": {"format": "m4a", "bitrate": "192K"},
-    "FLAC": {"format": "flac", "bitrate": "0"},
+    "FLAC": {"format": "flac", "bitrate": "0"}
 }
 tag_map = {
     "mp3": {"handler": EasyID3, "title": "title", "artist": "artist", "album": "album", "date": "date"},
@@ -427,7 +426,6 @@ def download_youtube(youtube_id):
         'outtmpl': f".TEMP/{youtube_id}.%(ext)s",
         'quiet': True,
     }
-    random_id = str(uuid.uuid4())
     try:
         with yt_dlp.YoutubeDL(ydl_config) as ydl:
             info = ydl.extract_info(f"https://music.youtube.com/watch?v={youtube_id}")
@@ -438,7 +436,7 @@ def download_youtube(youtube_id):
         artist_str = sanitize(", ".join(artist_list))
         album = sanitize(info.get('album', "Unknown Album"))
         release_year = info.get('release_year') or int(info.get('upload_date', "20000000")[0:4] or 0)
-        length = info.get('duration', 200)
+        length = info.get('duration', 0)
         covers = info.get('thumbnails')
         if not covers[2].get('height', 1) == covers[2].get('width', 0):
             cover_url = info.get('thumbnail')
@@ -461,7 +459,7 @@ def download_youtube(youtube_id):
 
 # A wrapper function for all the download functions
 
-def download_single(song_dict:dict,folder_name:str = None):
+def download_single(song_dict:dict,folder_name:str = None, callback=None):
     # Download initial file from service
     if song_dict["type"] == "youtube":
         result = download_youtube(song_dict["youtube_id"])
@@ -480,13 +478,15 @@ def download_single(song_dict:dict,folder_name:str = None):
     else:
         output_folder = os.path.join(config["path"], folder_name)
         os.makedirs(output_folder, exist_ok=True)
-
+    if callback: callback("transcoding")
     templater_data = {"title": song_dict["title"],"artist":song_dict["artists"].join(","),"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": song_dict["track_number"]}
     final_filename = template_decoder(config["filename_template"], data=templater_data)
     # Transcode
     ffmpeg_out = transcode_audio(music_filename, output_folder,final_filename,quality_preset=config["quality"])
     # Add text based metadata
+    if callback: callback("metadata")
     edit_audio_metadata(ffmpeg_out,data=templater_data)
     # Add cover
     cover_file = download_file(song_dict["thumbnail"], ".TEMP")
     add_cover_art(ffmpeg_out, cover_file)
+    if callback: callback("done")

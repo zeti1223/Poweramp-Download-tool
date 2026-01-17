@@ -3,7 +3,7 @@ import os
 def update_folder_playlist(folder_path):
     if not os.path.isdir(folder_path): return False
     
-    audio_formats = {".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"}
+    audio_formats = {".mp3", ".flac", ".ogg", ".m4a"}
     audio_files = []
 
     for root, _, files in os.walk(folder_path):
