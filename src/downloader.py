@@ -147,12 +147,11 @@ def edit_audio_metadata(input_file: str, data: dict):
         if ext == "mp3":
             tags["albumartist"] = artist_str
 
-    # Updated field_mapping to include 'track'
     field_mapping = {
         "title": mapping.get("title"),
         "album": mapping.get("album"),
         "year": mapping.get("date"),
-        "track_number": mapping.get("track")  # Added track here
+        "track_number": mapping.get("track")
     }
 
     for data_key, tag_key in field_mapping.items():
@@ -161,8 +160,6 @@ def edit_audio_metadata(input_file: str, data: dict):
 
         val = data.get(data_key)
         if val is not None:
-            # Note: For M4A (MP4), 'trkn' usually expects a tuple/list [(track, total)]
-            # If your tag_map handler is standard Mutagen, str(val) works best for MP3 (TRCK)
             tags[tag_key] = str(val)
 
     if ext == "mp3":
