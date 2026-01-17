@@ -213,7 +213,7 @@ class MusicDownloaderApp(App):
         elif level == "WARNING": color = "yellow"
         elif level == "ERROR": color = "red"
         elif level == "SYSTEM": color = "blue"
-        elif level == "DEBUG": color = "magenta"
+        elif level == "DEBUG": color = "purple"
         self.log_history.append(f"[{ts}] [{level}] {str(message)}")
         msg = Text.from_markup(f"[{color}][{ts}] [{level}] {escape(str(message))}[/{color}]")
         if threading.get_ident() == self._thread_id: self.query_one("#full_log", RichLog).write(msg)
