@@ -8,10 +8,10 @@ from textual.containers import Horizontal
 from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent, TabPane, RichLog, Select, DataTable, \
     ProgressBar, Switch
 
-from src.consts import CONFIG_FILE
-from src.downloader import *
-from src.playlist import *
-from src.threader import *
+from consts import CONFIG_FILE
+from downloader import *
+from playlist import *
+from threader import *
 
 class MusicDownloaderApp(App):
     CSS = """
@@ -30,7 +30,7 @@ class MusicDownloaderApp(App):
 
     TITLE = "Music Downloader"
     BINDINGS = [("q", "quit", "Exit"), ("ctrl+v", "paste_link", "Paste")]
-    CONFIG_FILE = "../config.json"
+    CONFIG_FILE = "src/config.json"
 
     def __init__(self):
         super().__init__()
