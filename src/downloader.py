@@ -19,12 +19,12 @@ import base64
 # Constants
 
 quality_map = {
-    "MP3 128kbps": {"format": "mp3", "bitrate": "128K"},
-    "MP3 256kbps": {"format": "mp3", "bitrate": "256K"},
-    "MP3 320kbps": {"format": "mp3", "bitrate": "320K"},
-    "OGG": {"format": "vorbis", "bitrate": "192K"},
-    "M4A": {"format": "m4a", "bitrate": "192K"},
-    "FLAC": {"format": "flac", "bitrate": "0"}
+    "MP3 128kbps": {"ext": "mp3", "codec": "libmp3lame", "bitrate": "128K"},
+    "MP3 256kbps": {"ext": "mp3", "codec": "libmp3lame", "bitrate": "256K"},
+    "MP3 320kbps": {"ext": "mp3", "codec": "libmp3lame", "bitrate": "320K"},
+    "OGG": {"ext": "ogg", "codec": "libvorbis", "bitrate": "192K"},
+    "M4A": {"ext": "m4a", "codec": "aac", "bitrate": "192K"},
+    "FLAC": {"ext": "flac", "codec": "flac", "bitrate": "0"}
 }
 tag_map = {
     "mp3": {"handler": EasyID3, "title": "title", "artist": "artist", "album": "album", "date": "date"},
@@ -406,7 +406,7 @@ def soundcloud_get_initial(link):
 
 def download_spotify(song_dict):
     os.makedirs(".TEMP", exist_ok=True)
-    search_query = f"{song_dict['title']} {song_dict['artists'].join(' ')}"
+    search_query = f"{song_dict['title']} {' '.join(song_dict['artists'])}"
     if not check_network():
         raise ConnectionError("No internet connection!")
     yt_music_api = ytmusicapi.YTMusic()
@@ -438,13 +438,13 @@ def download_youtube(youtube_id):
         release_year = info.get('release_year') or int(info.get('upload_date', "20000000")[0:4] or 0)
         length = info.get('duration', 0)
         covers = info.get('thumbnails')
-        if not covers[2].get('height', 1) == covers[2].get('width', 0):
-            cover_url = info.get('thumbnail')
-        else:
-            cover_url = covers[2]["url"]
+        cover_url = info.get('thumbnail')
+        if covers and len(covers) > 2:
+            if covers[2].get('height', 1) == covers[2].get('width', 0):
+                cover_url = covers[2]["url"]
 
         return {
-            "id": id,
+            "id": youtube_id,
             "title": title,
             "artists": artist_list,
             "artist": artist_str,
@@ -479,7 +479,7 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
         output_folder = os.path.join(config["path"], folder_name)
         os.makedirs(output_folder, exist_ok=True)
     if callback: callback("transcoding")
-    templater_data = {"title": song_dict["title"],"artist":song_dict["artists"].join(","),"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": song_dict["track_number"]}
+    templater_data = {"title": song_dict["title"],"artist":", ".join(song_dict["artists"]),"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": song_dict["track_number"]}
     final_filename = template_decoder(config["filename_template"], data=templater_data)
     # Transcode
     ffmpeg_out = transcode_audio(music_filename, output_folder,final_filename,quality_preset=config["quality"])
@@ -487,9 +487,12 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
     if callback: callback("metadata")
     edit_audio_metadata(ffmpeg_out,data=templater_data)
     # Add cover
-    cover_file = download_file(song_dict["thumbnail"], ".TEMP")
-    add_cover_art(ffmpeg_out, cover_file)
+    if song_dict.get("thumbnail"):
+        cover_path = os.path.join(".TEMP", f"cover_{sanitize(song_dict['title'])}.jpg")
+        cover_file = download_file(song_dict["thumbnail"], cover_path)
+        if isinstance(cover_file, str) and os.path.exists(cover_file):
+            add_cover_art(ffmpeg_out, cover_file)
+            os.remove(cover_file)
     if callback: callback("cleaning")
     os.remove(music_filename)
-    os.remove(cover_file)
     if callback: callback("done")

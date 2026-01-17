@@ -1,4 +1,5 @@
 import datetime
+import os
 from pathlib import Path
 
 from rich.text import Text
@@ -212,6 +213,7 @@ class MusicDownloaderApp(App):
         elif level == "WARNING": color = "yellow"
         elif level == "ERROR": color = "red"
         elif level == "SYSTEM": color = "blue"
+        elif level == "DEBUG": color = "magenta"
         self.log_history.append(f"[{ts}] [{level}] {str(message)}")
         msg = Text.from_markup(f"[{color}][{ts}] [{level}] {escape(str(message))}[/{color}]")
         if threading.get_ident() == self._thread_id: self.query_one("#full_log", RichLog).write(msg)
@@ -232,12 +234,16 @@ class MusicDownloaderApp(App):
             total_tracks = 0
             done_tracks = 0
 
-            for folder in self.download_queue:
-                tracks = folder.get('tracks', [])
-                total_tracks += len(tracks)
-
-                for track in tracks:
-                    if track.get('status') in ('done', 'error'):
+            for item in self.download_queue:
+                if item.get("item-type") == "playlist":
+                    tracks = item.get('tracks', [])
+                    total_tracks += len(tracks)
+                    for track in tracks:
+                        if track.get('status') in ('done', 'error'):
+                            done_tracks += 1
+                elif item.get("item-type") == "track":
+                    total_tracks += 1
+                    if item.get('status') in ('done', 'error'):
                         done_tracks += 1
 
             bar.update(total=total_tracks if total_tracks > 0 else 100, progress=done_tracks)
@@ -338,9 +344,14 @@ class MusicDownloaderApp(App):
 
     def change_state(self,state,q_num,q_s_num):
         if q_s_num is not None:
-            self.download_queue[q_num][q_s_num]["state"] = state
+            self.download_queue[q_num]["tracks"][q_s_num]["status"] = state
+            title = self.download_queue[q_num]["tracks"][q_s_num].get("title", "Unknown")
         else:
-            self.download_queue[q_num]["state"] = state
+            self.download_queue[q_num]["status"] = state
+            title = self.download_queue[q_num].get("title", "Unknown")
+        
+        if self.cfg_dev_mode:
+            self.log_msg(f"Step: {state} -> {title}", "DEBUG")
 
     def _download_wrapper(self,queue_num,queue_sub_num):
         self.log_msg(f"Started job {queue_sub_num} in {queue_num}","INFO")
@@ -349,11 +360,11 @@ class MusicDownloaderApp(App):
             callback = lambda state: self.change_state(state, queue_num, queue_sub_num)
             folder_name = sanitize(self.download_queue[queue_num]["title"])
             try:
-                download_single(song_dict=self.download_queue[queue_num][queue_sub_num],folder_name=folder_name, callback=callback)
+                download_single(song_dict=self.download_queue[queue_num]["tracks"][queue_sub_num],folder_name=folder_name, callback=callback)
             except Exception as e:
                 self.change_state("error", queue_num, queue_sub_num)
                 raise e
-        elif queue_num is None:
+        else:
             self.change_state("downloading",queue_num,queue_sub_num)
             callback = lambda state: self.change_state(state,queue_num,queue_sub_num)
             try:
@@ -380,5 +391,3 @@ class MusicDownloaderApp(App):
         self.log_msg("Starting job queue","INFO")
         t = threading.Thread(target=self.thread_system.wait_completion)
         t.start()
-
-
