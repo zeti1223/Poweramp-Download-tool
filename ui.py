@@ -1,7 +1,5 @@
 import os
 import threading
-import json
-import re
 import datetime
 import time
 from pathlib import Path
@@ -79,8 +77,7 @@ class MusicDownloaderApp(App):
                     yield Button("Abort", id="btn_abort", variant="error")
                     yield Button("Clear List", id="btn_clear")
                 with Horizontal(classes="status_bar"):
-                    yield Label("Progress: 0%", id="speed_label")
-                    yield Label("   Overall progress:", id="overall_progress_label")
+                    yield Label("Progress:", id="overall_progress_label")
                     yield ProgressBar(total=100, show_eta=True, id="overall_progress")
                 yield DataTable(id="queue_table")
             with TabPane("Detailed Log", id="tab_log"):
@@ -115,6 +112,7 @@ class MusicDownloaderApp(App):
                 inp = self.query_one("#link_entry", Input)
                 inp.value = content.strip()
                 inp.focus()
+                self.notify("Link pasted!")
         except:
             pass
 
@@ -223,29 +221,39 @@ class MusicDownloaderApp(App):
         table = self.query_one(DataTable)
         table.clear()
 
-        for folder_data in self.download_queue:
-            title = folder_data['title']
-            is_expanded = title in self.expanded_folders
-            icon = "📂" if is_expanded else "📁"
+        for item in self.download_queue:
+            if item["item-type"] == "track":
+                status_styled = {
+                    "done": "[green]DONE[/]",
+                    "error": "[red]ERROR[/]",
+                    "working": "[blue]WORK[/]",
+                    "waiting": "WAIT"
+                }.get(item['status'], item['status'])
 
-            table.add_row(
-                "",
-                "",
-                f"[bold yellow]{icon} {title}[/]",
-                "",
-                key=f"folder:{title}"
-            )
+                table.add_row(str(item['track_number']), status_styled, f"   {item['title']}", "")
+            if item["item-type"] == "playlist":
+                title = item['title']
+                is_expanded = title in self.expanded_folders
+                icon = "📂" if is_expanded else "📁"
 
-            if is_expanded:
-                for track in folder_data['tracks']:
-                    status_styled = {
-                        "done": "[green]DONE[/]",
-                        "error": "[red]ERROR[/]",
-                        "working": "[blue]WORK[/]",
-                        "waiting": "WAIT"
-                    }.get(track['status'], track['status'])
+                table.add_row(
+                    "",
+                    "",
+                    f"[bold yellow]{icon} {title}[/]",
+                    "",
+                    key=f"folder:{title}"
+                )
 
-                    table.add_row(str(track['track_number']), status_styled, f"   {track['title']}", title)
+                if is_expanded:
+                    for track in item['tracks']:
+                        status_styled = {
+                            "done": "[green]DONE[/]",
+                            "error": "[red]ERROR[/]",
+                            "working": "[blue]WORK[/]",
+                            "waiting": "WAIT"
+                        }.get(track['status'], track['status'])
+
+                        table.add_row(str(track['track_number']), status_styled, f"   {track['title']}", title)
 
     def toggle_pause(self):
         self.pause_requested = not self.pause_requested
@@ -276,20 +284,25 @@ class MusicDownloaderApp(App):
 
     def process_input(self, link):
         self.log_msg(f"Analyzing: {link}", "ANALYZER")
-        domain = link.strip("https://").strip("http://").split("/")[0]
+        domain = link.removeprefix("https://").removeprefix("http://").split("/")[0]
         try:
             if "youtube.com" in domain or "youtu.be" in domain:
                 result_dict = youtube_get_initial(link)
                 self.download_queue.append(result_dict)
-            if "soundcloud.com" in domain:
-                pass
-            if "spotify.com" in domain:
+            elif "soundcloud.com" in domain:
+                self.notify("We are working on this platform",severity="warning")
+            elif "spotify.com" in domain:
                 result_dict = spotify_get_initial(link)
                 self.download_queue.append(result_dict)
-
+            elif "cigoria.eu" in domain:
+                self.notify("Creators: Zeti_1223 and SkyFonix")
+            else:
+                self.log_msg(f"Error: service at {domain} is not supported!", "ERROR")
+                self.notify(f"Error: service at {domain} is not supported!",severity="error")
 
         except Exception as e:
             self.log_msg(f"Error: {e}", "ERROR")
+            self.notify(f"Error: {e}",severity="error")
 
         self.refresh_queue_ui()
         self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
@@ -330,12 +343,6 @@ class MusicDownloaderApp(App):
             if target_track and len(active_threads) < int(self.cfg_max_parallel):
                 target_track["status"] = "working"
                 self.refresh_queue_ui()
-                t = threading.Thread(
-                    target=self.process_single_track,
-                    args=(target_track, target_folder['title'], quality_cfg, base_path)
-                )
-                t.start()
-                active_threads.append(t)
                 continue
 
             time.sleep(0.5)
@@ -343,32 +350,3 @@ class MusicDownloaderApp(App):
         for t in active_threads: t.join()
         self.is_downloading = False
         self.log_msg("All tasks finished.", "SYSTEM")
-
-    def process_single_track(self, track, folder_name, quality_cfg, base_path):
-        save_dir = base_path / folder_name
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        display_name = f"{track['artists'][0]} - {track['title']}"
-        self.log_msg(f"Downloading: {display_name}", "DL")
-
-        def progress_cb(msg):
-            self.call_from_thread(self.query_one("#speed_label", Label).update, msg)
-
-        success, filename = run_yt_dlp(
-            track.get('url', track.get('query')),
-            quality_cfg,
-            save_dir,
-            self.process_lock,
-            self.active_processes,
-            lambda: self.stop_requested,
-            progress_cb
-        )
-
-        if success and filename:
-            self.meta_manager.apply_metadata(filename, track, self.log_msg)
-            update_folder_playlist(str(save_dir))
-            track["status"] = "done"
-        else:
-            track["status"] = "error"
-
-        self.refresh_queue_ui()

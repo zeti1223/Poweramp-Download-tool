@@ -1,16 +1,28 @@
 import sys
+import subprocess
+import os
 
-# Függőségek ellenőrzése
+
+def install_and_restart():
+    print("Detecting missing dependencies. Installing...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        print("Installation successful! Restarting...")
+
+        os.execl(sys.executable, sys.executable, *sys.argv)
+    except Exception as e:
+        print(f"An error occurred during installation: {e}")
+        sys.exit(1)
+
+
 try:
     import requests
     import musicbrainzngs
     import mutagen
     import textual
     from ui import MusicDownloaderApp
-except ImportError as e:
-    print(f"Hiba: Hiányzó könyvtár: {e}")
-    print("Telepítsd a függőségeket: pip install textual requests musicbrainzngs mutagen spotipy yt-dlp")
-    exit(1)
+except ImportError:
+    install_and_restart()
 
 if __name__ == "__main__":
     app = MusicDownloaderApp()

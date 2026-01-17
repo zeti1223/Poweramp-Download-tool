@@ -1,20 +1,49 @@
 import subprocess
 import json
 import re
+import yt_dlp
+import uuid
 import ytmusicapi
 import ping3
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+import os
 
-
+# Helper functions
 def check_network():
     is_online = ping3.ping("1.1.1.1")
     return is_online
 
+def sanitize(s):
+    return re.sub(r'[<>:"/\\|?*\']', '', s)
+
+def template_decoder(template, data: dict = None, magic_char: str = "$"):
+    if data is None: data = {}
+    final, opened, opened_keyword = "", False, ""
+    for char in template:
+        if not opened:
+            if char == magic_char:
+                opened = True
+            else:
+                final += char
+            continue
+        if opened:
+            if char == magic_char:
+                opened = False
+                final += str(data.get(opened_keyword, ''))
+                opened_keyword = ""
+            else:
+                opened_keyword += char
+            continue
+
+    return re.sub(r'[<>:"/\\|?*\']', '', final).strip()
+
+
+# Initial metadata collection functions
 
 def spotify_get_initial(link):
     try:
-        if "playlist/" not in link and "album/" not in link:
+        if "playlist/" not in link and "album/" not in link and "track/" not in link:
             raise ValueError("Not Playlist Link!")
         if not check_network():
             raise ConnectionError("No internet connection!")
@@ -40,6 +69,7 @@ def spotify_get_initial(link):
             return_dict["title"] = collection_data.get("name", "Unknown title")
             return_dict["thumbnail"] = collection_data.get("images", [])[0].get("url", None)
             return_dict["type"] = "spotify"
+            return_dict["item-type"] = "playlist"
 
             return_result = sp.playlist_items(spotify_id)
 
@@ -61,8 +91,8 @@ def spotify_get_initial(link):
                 track_dict["status"] = "waiting"
                 track_dict["spotify_id"] = track["track"].get("id", None)
                 track_dict["type"] = "spotify"
+                track_dict["item-type"] = "track"
                 return_dict["tracks"].append(track_dict)
-
         if "album/" in link:
             collection_data = sp.album(spotify_id)
 
@@ -71,6 +101,7 @@ def spotify_get_initial(link):
             return_dict["thumbnail"] = collection_data.get("images", [])[0].get("url", None)
             return_dict["type"] = "spotify"
             return_dict["spotify_id"] = spotify_id
+            return_dict["item-type"] = "playlist"
 
             for i, track in enumerate(collection_data["tracks"]["items"]):
                 track_dict = {}
@@ -87,57 +118,97 @@ def spotify_get_initial(link):
                 track_dict["status"] = "waiting"
                 track_dict["spotify_id"] = track.get("id", None)
                 track_dict["type"] = "spotify"
+                track_dict["item-type"] = "track"
                 return_dict["tracks"].append(track_dict)
+        if "track/" in link:
+            track_data = sp.track(spotify_id)
+
+            return_dict["title"] =track_data.get("name", "Unknown title")
+            return_dict["album"] = track_data.get("album", {}).get("name", "Unknown album")
+            return_dict["artists"] = [i.get("name", "Unknown artist") for i in
+                                     track_data.get("artists")] if track_data.get(
+                "artists") is not None else ["Unknown artist"]
+            return_dict["release"] = track_data["album"].get("release_date", None)
+            return_dict["release"] = return_dict["release"].split("-")[0] if return_dict["release"] else None
+            return_dict["thumbnail"] = track_data["album"]["images"][0].get("url", None)
+            return_dict["track_number"] = 1
+            return_dict["status"] = "waiting"
+            return_dict["spotify_id"] = track_data.get("id", None)
+            return_dict["type"] = "spotify"
+            return_dict["item-type"] = "track"
+
         return return_dict
     except Exception as e:
         raise e
 
 def youtube_get_initial(link):
     try:
-        if "list" not in link:
-            raise ValueError("Not Playlist Link!")
+        if "list" not in link and "watch?v=" not in link:
+            raise ValueError("Not a valid Link!")
         if not check_network():
             raise ConnectionError("No internet connection!")
-        youtube_id = link.split("/")[-1].split("?list=")[-1]
-        if youtube_id is None:
-            raise ValueError("No youtube id given!")
-        if len(youtube_id) != 34:
-            ValueError("Invalid youtube id given!")
-
         yt_music_api = ytmusicapi.YTMusic()
         try:
-            data = yt_music_api.get_playlist(playlistId=youtube_id, limit=None)
             return_dict = {}
+            if "watch?v=" in link:
+                youtube_id = link.split("watch?v=")[1].split("&")[0]
+                if youtube_id is None:
+                    raise ValueError("No youtube id given!")
+                if len(youtube_id) != 11:
+                    ValueError("Invalid youtube id given!")
+                data = yt_music_api.get_song(youtube_id)
+                return_dict["title"] = data["videoDetails"].get("title", "Unknown title")
+                return_dict["album"] = "Unknown album"
+                return_dict["artists"] = data["videoDetails"].get("author", "Unknown artist").split("&")
+                return_dict["release"] = None
+                return_dict["thumbnail"] = data["videoDetails"]["thumbnail"]["thumbnails"][-1].get("url", None)
+                return_dict["track_number"] = 1
+                return_dict["status"] = "waiting"
+                return_dict["youtube_id"] = youtube_id
+                return_dict["type"] = "youtube"
+                return_dict["item-type"] = "track"
 
-            return_dict["tracks"] = []
-            for i,track in enumerate(data["tracks"]):
-                print(track)
+
+            elif "?list=" in link:
+                youtube_id = link.split("/")[-1].split("?list=")[-1]
+                if youtube_id is None:
+                    raise ValueError("No youtube id given!")
+                if len(youtube_id) != 34:
+                    ValueError("Invalid youtube id given!")
+
+                data = yt_music_api.get_playlist(playlistId=youtube_id, limit=None)
+                return_dict["tracks"] = []
+                for i,track in enumerate(data["tracks"]):
+                    print(track)
+                    try:
+                        track_dict = {}
+                        track_dict["title"] = track.get("title", "Unknown title")
+                        track_dict["artists"] = [i.get("name", "Unknown artist") for i in track.get("artists")] if track.get(
+                            "artists") is not None else ["Unknown artist"]
+
+                        track_dict["album"] = track.get("album", {}).get("name", "Unknown album") if not track["album"] is None else "Unknown album"
+
+                        track_dict["duration_seconds"] = track.get("duration", 0)
+                        track_dict["thumbnail"] = track.get("thumbnails")[0]["url"].split("=")[0] + "=w600-h600" if track.get(
+                            "thumbnails") is not None else None
+                        track_dict["youtube_id"] = track["videoId"]
+                        track_dict["type"] = "youtube"
+                        track_dict["item-type"] = "track"
+                        track_dict["release"] = None
+                        track_dict["track_number"] = i+1
+                        track_dict["status"] = "waiting"
+                        return_dict["tracks"].append(track_dict)
+
+                    except Exception as e:
+                        print(e)
                 try:
-                    track_dict = {}
-                    track_dict["title"] = track.get("title", "Unknown title")
-                    track_dict["artists"] = [i.get("name", "Unknown artist") for i in track.get("artists")] if track.get(
-                        "artists") is not None else ["Unknown artist"]
-
-                    track_dict["album"] = track.get("album", {}).get("name", "Unknown album") if not track["album"] is None else "Unknown album"
-
-                    track_dict["duration_seconds"] = track.get("duration", 0)
-                    track_dict["thumbnail"] = track.get("thumbnails")[0]["url"].split("=")[0] + "=w600-h600" if track.get(
-                        "thumbnails") is not None else None
-                    track_dict["youtube_id"] = track["videoId"]
-                    track_dict["type"] = "youtube"
-                    track_dict["release"] = None
-                    track_dict["track_number"] = i+1
-                    track_dict["status"] = "waiting"
-                    return_dict["tracks"].append(track_dict)
+                    return_dict["title"] = data.get("title", "Unknown Title")
+                    return_dict["thumbnail"] = data.get("thumbnails", [])[-1].get("url", None)
+                    return_dict["type"] = "youtube"
+                    return_dict["item-type"] = "playlist"
 
                 except Exception as e:
                     print(e)
-            try:
-                return_dict["title"] = data.get("title", "Unknwon Title")
-                return_dict["thumbnail"] = data.get("thumbnails", [])[-1].get("url", None)
-                return_dict["type"] = "youtube"
-            except Exception as e:
-                print(e)
 
             return return_dict
         except Exception as e:
@@ -148,91 +219,64 @@ def youtube_get_initial(link):
 def soundcloud_get_initial(link):
     pass
 
-def fetch_info(link):
-    """Lekéri az információkat a linkről yt-dlp segítségével."""
-    cmd = ["yt-dlp", "--flat-playlist", "--dump-single-json", link]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode != 0:
-        raise Exception(f"yt-dlp error: {res.stderr}")
-    return json.loads(res.stdout)
+# Download functions for service
 
-def get_spotify_tracks(link, client_id, client_secret):
-    """Spotify link feldolgozása."""
-    import spotipy
-    from spotipy.oauth2 import SpotifyClientCredentials
-    
-    sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
-    results = []
-    
-    if "/playlist/" in link:
-        pid = link.split("/playlist/")[1].split("/")[0]
-        pl = sp.playlist(pid)
-        f_name = re.sub(r'[\\/*?:"<>|]', "", pl['name'])
-        tracks = pl['tracks']['items'] # Egyszerűsítve
-        for item in tracks:
-            if item.get('track'):
-                t = item['track']
-                name = f"{t['artists'][0]['name']} - {t['name']}"
-                results.append({"query": name, "display_name": name, "folder": f_name})
-    elif "/track/" in link:
-        tid = link.split("/track/")[1].split("/")[0]
-        t = sp.track(tid)
-        name = f"{t['artists'][0]['name']} - {t['name']}"
-        results.append({"query": name, "display_name": name, "folder": None})
-        
-    return results
+def download_spotify(song_dict):
+    os.makedirs(".TEMP", exist_ok=True)
+    search_query = f"{song_dict['title']} {song_dict['artists'].join(' ')}"
+    if not check_network():
+        raise ConnectionError("No internet connection!")
+    yt_music_api = ytmusicapi.YTMusic()
+    result_for_search = yt_music_api.search(search_query,filter="songs",limit=1)
+    result = download_youtube(result_for_search[0]["videoId"])
 
-def run_yt_dlp(query, cfg, out_dir, process_lock, active_processes, is_stopped_func, progress_callback):
-    """Futtatja a yt-dlp-t a megadott paraméterekkel."""
-    url = query if query.startswith("http") else f"ytsearch1:{query}"
-    
-    # Parancs összeállítása
-    cmd = ["yt-dlp", url, "-x", "--audio-format", cfg["format"], "--newline", "-o", str(out_dir / "%(title)s.%(ext)s")]
-    
-    if cfg["format"] == "webm":
-        cmd = ["yt-dlp", url, "-f", "bestaudio[ext=webm]/bestaudio", "--newline", "-o", str(out_dir / "%(title)s.%(ext)s")]
-    elif cfg["bitrate"] != "0":
-        cmd.extend(["--audio-quality", cfg["bitrate"]])
-
-    # Folyamat indítása
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    
-    with process_lock:
-        active_processes.append(proc)
-    
-    downloaded_file = None
-    
+    return
+def download_youtube(youtube_id):
+    if not check_network():
+        raise ConnectionError("No internet connection!")
+    if youtube_id is None:
+        raise ValueError("No youtube id given!")
+    if len(youtube_id) != 11:
+        ValueError("Invalid youtube id given!")
+    ydl_config = {
+        'format': "bestaudio/best",
+        'outtmpl': f".TEMP/{youtube_id}.%(ext)s",
+        'quiet': True,
+    }
+    random_id = str(uuid.uuid4())
     try:
-        for line in proc.stdout:
-            if is_stopped_func():
-                proc.terminate()
-                break
-            
-            # Fájlnév detektálása a kimenetből
-            if "[download] Destination:" in line:
-                downloaded_file = line.split("Destination:", 1)[1].strip()
-            elif "[Merger] Merging formats into" in line:
-                downloaded_file = line.split('"', 1)[1].rsplit('"', 1)[0]
-            elif "[ExtractAudio] Destination:" in line:
-                downloaded_file = line.split("Destination:", 1)[1].strip()
-            # Ha már létezik
-            elif "has already been downloaded" in line:
-                downloaded_file = line.split("[download] ", 1)[1].split(" has already")[0].strip()
+        with yt_dlp.YoutubeDL(ydl_config) as ydl:
+            info = ydl.extract_info(f"https://music.youtube.com/watch?v={youtube_id}")
 
-            # Progress bar frissítés callback
-            match = re.search(r'(\d+\.\d+)%', line)
-            if match and progress_callback:
-                progress_callback(f"Progress: {match.group(1)}%")
-    except Exception as e:
-        print(f"Stream error: {e}")
-    finally:
-        # Biztos, ami biztos, várjuk meg a végét vagy a killt
-        if proc.poll() is None:
-            proc.wait()
-            
-        # Törlés az aktív listából
-        with process_lock: 
-            if proc in active_processes:
-                active_processes.remove(proc)
-            
-    return (proc.returncode == 0, downloaded_file)
+        audio_file = info["requested_downloads"][0]["filepath"]
+        title = sanitize(info.get('title', "Unknown Title"))
+        artist_list = info.get('artists', [info.get('uploader', "Unknown Artist")])
+        artist_str = sanitize(", ".join(artist_list))
+        album = sanitize(info.get('album', "Unknown Album"))
+        release_year = info.get('release_year') or int(info.get('upload_date', "20000000")[0:4] or 0)
+        length = info.get('duration', 200)
+        covers = info.get('thumbnails')
+        if not covers[2].get('height', 1) == covers[2].get('width', 0):
+            cover_url = info.get('thumbnail')
+        else:
+            cover_url = covers[2]["url"]
+
+        return {
+            "id": id,
+            "title": title,
+            "artists": artist_list,
+            "artist": artist_str,
+            "album": album,
+            "release": release_year,
+            "length": length,
+            "cover_url": cover_url,
+            "file_path": audio_file,
+        }
+    except Exception as e: raise e
+
+
+# A wrapper function for all the download functions
+
+def download_single(song_dict:dict):
+    pass
+

@@ -1,16 +1,14 @@
 import os
 
 def update_folder_playlist(folder_path):
-    """Frissíti az .m3u8 playlistet az adott mappában."""
     if not os.path.isdir(folder_path): return False
     
-    audio_exts = {".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"}
+    audio_formats = {".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"}
     audio_files = []
 
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if os.path.splitext(file)[1].lower() in audio_exts:
-                # Relatív útvonal a playlist fájlhoz képest
+            if os.path.splitext(file)[1].lower() in audio_formats:
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, folder_path)
                 audio_files.append(rel_path)
