@@ -1,5 +1,5 @@
 import os
-import threading
+import threader
 import datetime
 import time
 import json
@@ -16,6 +16,8 @@ from consts import CONFIG_FILE
 from metadata import MetadataManager
 from playlist import update_folder_playlist
 from downloader import *
+from threading import *
+
 
 class MusicDownloaderApp(App):
     CSS = """
@@ -53,7 +55,7 @@ class MusicDownloaderApp(App):
         self.cfg_path = str(Path.home() / "MusicDownloader")
         self.cfg_sp_id = ""
         self.cfg_sp_sec = ""
-        self.cfg_quality = "MP3 320kbps"
+        self.cfg_quality = "MP3 256kbps"
         self.cfg_max_parallel = "1"
         self.cfg_dev_mode = False
         self.cfg_template = "$artist$ - $title$"

@@ -10,10 +10,12 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import os
 import imageio_ffmpeg as ffmpeg
 from mutagen.easyid3 import EasyID3
-from mutagen.mp4 import MP4
+from mutagen.id3 import ID3, APIC
+from mutagen.mp4 import MP4, MP4Cover
 from mutagen.oggvorbis import OggVorbis
-from mutagen.flac import FLAC
+from mutagen.flac import FLAC, Picture
 import requests
+import base64
 
 # Constants
 
@@ -162,6 +164,65 @@ def edit_audio_metadata(input_file: str, data: dict):
         audio.save()
 
     return data
+
+def add_cover_art(audio_path: str, image_path: str):
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image file not found: {image_path}")
+
+    ext = os.path.splitext(audio_path)[1].lstrip(".").lower()
+
+    with open(image_path, "rb") as img_file:
+        image_data = img_file.read()
+
+    if ext == "mp3":
+        try:
+            audio = ID3(audio_path)
+        except Exception:
+            audio = ID3()
+
+        audio.add(APIC(
+            encoding=3,
+            mime='image/png',
+            type=3,
+            desc='Front Cover',
+            data=image_data
+        ))
+        audio.save(audio_path, v2_version=3)
+
+    elif ext == "m4a":
+        audio = MP4(audio_path)
+        cover = MP4Cover(image_data, imageformat=MP4Cover.FORMAT_PNG)
+        audio.tags["covr"] = [cover]
+        audio.save()
+
+    elif ext == "flac":
+        audio = FLAC(audio_path)
+        picture = Picture()
+        picture.data = image_data
+        picture.type = 3
+        picture.mime = "image/png"
+        picture.desc = "Front Cover"
+        audio.add_picture(picture)
+        audio.save()
+
+    elif ext == "ogg":
+        audio = OggVorbis(audio_path)
+        picture = Picture()
+        picture.data = image_data
+        picture.type = 3
+        picture.mime = "image/png"
+        picture.desc = "Front Cover"
+
+        picture_data = base64.b64encode(picture.write()).decode('ascii')
+        audio["metadata_block_picture"] = [picture_data]
+        audio.save()
+
+    else:
+        raise ValueError(f"Unsupported format for cover art: {ext}")
+
+    return True
 
 def spotify_get_initial(link):
     try:
@@ -416,7 +477,9 @@ def download_single(song_dict:dict,folder_name:str = None):
         config = json.load(f)
 
     if folder_name is None:output_folder = config["path"]
-    else:output_folder = os.path.join(config["path"], folder_name)
+    else:
+        output_folder = os.path.join(config["path"], folder_name)
+        os.makedirs(output_folder, exist_ok=True)
 
     templater_data = {"title": song_dict["title"],"artist":song_dict["artists"].join(","),"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": song_dict["track_number"]}
     final_filename = template_decoder(config["filename_template"], data=templater_data)
@@ -426,6 +489,7 @@ def download_single(song_dict:dict,folder_name:str = None):
     edit_audio_metadata(ffmpeg_out,data=templater_data)
     # Add cover
     cover_file = download_file(song_dict["thumbnail"], ".TEMP")
+    add_cover_art(ffmpeg_out, cover_file)
 
 
 
