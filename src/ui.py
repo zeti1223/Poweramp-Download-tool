@@ -406,6 +406,7 @@ class MusicDownloaderApp(App):
                 for queue_sub_num, data2 in enumerate(data["tracks"]):
                     if data2["status"] == "waiting" or data2["status"] == "error":
                         job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num: self._download_wrapper(q_num, q_s_num))
+
         self.log_msg(job_queue,"DEBUG")
         self.thread_system.submit_jobs(job_queue)
         self.log_msg("Starting job queue","INFO")

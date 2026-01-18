@@ -1,6 +1,8 @@
 import subprocess
 import json
 import re
+import uuid
+
 import yt_dlp
 import ytmusicapi
 import ping3
@@ -27,7 +29,7 @@ quality_map = {
     "FLAC": {"ext": "flac", "codec": "flac", "bitrate": "0"}
 }
 tag_map = {
-    "mp3": {"handler": EasyID3,"title": "title","artist": "artist","album": "album","date": "date","track": "tracknumber"},
+    "mp3": {"handler": EasyID3,"title": "title","artist": "albumartist","album": "album","date": "date","track": "tracknumber"},
     "m4a": {"handler": MP4,"title": "\xa9nam","artist": "\xa9ART","album": "\xa9alb","date": "\xa9day","track": "trkn"},
     "ogg": {"handler": OggVorbis, "title": "TITLE", "artist": "ARTIST", "album": "ALBUM", "date": "DATE", "track": "TRACKNUMBER"},
     "flac": {"handler": FLAC, "title": "TITLE", "artist": "ARTIST", "album": "ALBUM", "date": "DATE", "track": "TRACKNUMBER"}
@@ -49,7 +51,8 @@ def download_file(url: str, save_path: str):
             for chunk in r.iter_content(8192):
                 f.write(chunk)
         return save_path
-    return None, None
+    else:
+        raise ConnectionError("Failure to download cover art!")
 
 def template_decoder(template, data: dict = None, magic_char: str = "$"):
     if data is None: data = {}
@@ -389,14 +392,9 @@ def youtube_get_initial(link):
 
                     except Exception as e:
                         print(e)
-                try:
-                    return_dict["title"] = data.get("title", "Unknown Title")
-                    return_dict["thumbnail"] = data.get("thumbnails", [])[-1].get("url", None)
-                    return_dict["type"] = "youtube"
-                    return_dict["item-type"] = "playlist"
-
-                except Exception as e:
-                    print(e)
+                return_dict["title"] = data.get("title", "Unknown Title")
+                return_dict["type"] = "youtube"
+                return_dict["item-type"] = "playlist"
 
             return return_dict
         except Exception as e:
@@ -417,7 +415,7 @@ def download_spotify(song_dict):
     yt_music_api = ytmusicapi.YTMusic()
     result_for_search = yt_music_api.search(search_query,filter="songs",limit=1)
     result = download_youtube(result_for_search[0]["videoId"])
-    return result["file_path"]
+    return result["file_path"], result_for_search[0]["videoId"]
 
 def download_youtube(youtube_id):
     if not check_network():
@@ -471,9 +469,10 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
         song_dict["album"] = result["album"]
         song_dict["release"] = result["release"]
         song_dict["duration_seconds"] = result["length"]
+        id = song_dict["id"]
         music_filename = result["file_path"]
     if song_dict["type"] == "spotify":
-        music_filename = download_spotify(song_dict)
+        music_filename, id = download_spotify(song_dict)
 
     # Figure out folder name
 
@@ -494,11 +493,9 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
     edit_audio_metadata(ffmpeg_out,data=templater_data)
     # Add cover
     if song_dict.get("thumbnail"):
-        cover_path = os.path.join(".TEMP", f"cover_{sanitize(song_dict['title'])}.jpg")
-        cover_file = download_file(song_dict["thumbnail"], cover_path)
-        if isinstance(cover_file, str) and os.path.exists(cover_file):
-            add_cover_art(ffmpeg_out, cover_file)
-            os.remove(cover_file)
+        cover_file = download_file(song_dict["thumbnail"], f".TEMP/{sanitize(id)}.png")
+        add_cover_art(ffmpeg_out,f".TEMP/{sanitize(id)}.png")
+        os.remove(cover_file)
     if callback: callback("cleaning")
     os.remove(music_filename)
     if callback: callback("done")
