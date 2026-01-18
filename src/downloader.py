@@ -153,7 +153,7 @@ def edit_audio_metadata(input_file: str, data: dict):
         else:
             tags[mapping["artist"]] = artist_str
             if ext == "mp3":
-                tags["TPE2"] = artist_str
+                tags["artist"] = artist_str
 
     field_mapping = {
         "title": mapping.get("title"),
@@ -195,6 +195,7 @@ def edit_audio_metadata(input_file: str, data: dict):
         audio.save()
 
     return data
+
 def add_cover_art(audio_path: str, image_path: str):
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
