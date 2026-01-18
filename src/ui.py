@@ -204,7 +204,7 @@ class MusicDownloaderApp(App):
         except ImportError:
             self.notify("Please install 'pyperclip' module (pip install pyperclip)", severity="error")
         except Exception as e:
-            self.notify(f"Clipboard error: {e}", severity="error")
+            self.notify(f"Clipboard error: {escape(str(e))}", severity="error")
 
     def log_msg(self, message, level="INFO"):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
@@ -349,11 +349,11 @@ class MusicDownloaderApp(App):
                 self.notify("Creators: Zeti_1223 and SkyFonix")
             else:
                 self.log_msg(f"Error: service at {domain} is not supported!", "ERROR")
-                self.notify(f"Error: service at {domain} is not supported!", severity="error")
+                self.notify(f"Error: service at {escape(domain)} is not supported!", severity="error")
 
         except Exception as e:
             self.log_msg(f"Error: {e}", "ERROR")
-            self.notify(f"Error: {e}", severity="error")
+            self.notify(f"Error: {escape(str(e))}", severity="error")
 
         self.refresh_queue_ui()
         self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
@@ -390,8 +390,28 @@ class MusicDownloaderApp(App):
                 download_single(song_dict=self.download_queue[queue_num],callback=callback)
             except Exception as e:
                 self.log_msg(f"Download failed: {e}", "ERROR")
-                self.change_state("error", queue_num, None)
+                self.change_state("error", queue_num, queue_sub_num)
                 raise e
+
+    def _generate_playlists(self):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                download_path = config.get("path", self.cfg_path)
+        except Exception:
+            download_path = self.cfg_path
+
+        for item in self.download_queue:
+            if item.get("item-type") == "playlist":
+                folder_name = sanitize(item["title"])
+                full_path = os.path.join(download_path, folder_name)
+                
+                if os.path.isdir(full_path):
+                    self.log_msg(f"Updating playlist for: {folder_name}", "INFO")
+                    if update_folder_playlist(full_path):
+                        self.log_msg(f"Playlist generated: {folder_name}", "SUCCESS")
+                    else:
+                        self.log_msg(f"No audio files found for playlist: {folder_name}", "WARNING")
 
     def start_downloads(self):
 
@@ -406,9 +426,13 @@ class MusicDownloaderApp(App):
                 for queue_sub_num, data2 in enumerate(data["tracks"]):
                     if data2["status"] == "waiting" or data2["status"] == "error":
                         job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num: self._download_wrapper(q_num, q_s_num))
-
         self.log_msg(job_queue,"DEBUG")
         self.thread_system.submit_jobs(job_queue)
         self.log_msg("Starting job queue","INFO")
-        t = threading.Thread(target=self.thread_system.wait_completion)
+        
+        def run_after():
+            self.thread_system.wait_completion()
+            self._generate_playlists()
+            
+        t = threading.Thread(target=run_after)
         t.start()
