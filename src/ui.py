@@ -372,7 +372,7 @@ class MusicDownloaderApp(App):
         self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
 
     def change_state(self,state,q_num,q_s_num, type="state"):
-        if type == "state":
+        if type == "state" or type == "status":
             if q_s_num is not None:
                 self.download_queue[q_num]["tracks"][q_s_num]["status"] = state
                 title = self.download_queue[q_num]["tracks"][q_s_num].get("title", "Unknown")

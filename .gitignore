@@ -220,3 +220,4 @@ install.sh
 config.json
 /.test/
 .TEMP/
+.pre-commit-config.yaml
