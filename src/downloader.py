@@ -432,14 +432,24 @@ def soundcloud_get_initial(link):
 
 # Download functions for service
 
-def download_spotify(song_dict):
+def download_spotify(song_dict,callback=None):
     os.makedirs(".TEMP", exist_ok=True)
-    search_query = f"{song_dict['title']} {' '.join(song_dict['artists'])}"
+    search_query = f"{sanitize(' '.join(song_dict['artists']))} {song_dict['title']}"
     if not check_network():
         raise ConnectionError("No internet connection!")
     yt_music_api = ytmusicapi.YTMusic()
-    result_for_search = yt_music_api.search(search_query,filter="songs",limit=1)
-    result = download_youtube(result_for_search[0]["videoId"])
+    result_for_search = yt_music_api.search(search_query,filter="songs",limit=10)
+    video_id = None
+    for i in result_for_search:
+        if str(i.get("artists",[{}])[0].get("name")).lower() in str(' '.join(song_dict['artists'])).lower():
+            video_id=i.get("videoId")
+            break
+    video_id = video_id if video_id is not None else result_for_search[0]["videoId"]
+    if callback: callback(f"Searched for {search_query}","log")
+    if callback: callback(f"Result is {result_for_search}","log")
+    if callback: callback(f"Final id {video_id}","log")
+    result = download_youtube(video_id)
+    if callback: callback(f"Done {result}","log")
     return result["file_path"], result_for_search[0]["videoId"]
 
 def download_youtube(youtube_id):
@@ -497,7 +507,7 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
         id = result["id"]
         music_filename = result["file_path"]
     if song_dict["type"] == "spotify":
-        music_filename, id = download_spotify(song_dict)
+        music_filename, id = download_spotify(song_dict, callback)
 
     # Figure out folder name
 
@@ -508,19 +518,19 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
     else:
         output_folder = os.path.join(config["path"], folder_name)
         os.makedirs(output_folder, exist_ok=True)
-    if callback: callback("transcoding")
+    if callback: callback("transcoding","status")
     templater_data = {"title": song_dict["title"],"artist":", ".join(song_dict["artists"]),"artists": song_dict["artists"],"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": int(song_dict["track_number"])}
     final_filename = template_decoder(config["filename_template"], data=templater_data)
     # Transcode
     ffmpeg_out = transcode_audio(music_filename, output_folder,final_filename,quality_preset=config["quality"])
     # Add text based metadata
-    if callback: callback("metadata")
+    if callback: callback("metadata","status")
     edit_audio_metadata(ffmpeg_out,data=templater_data)
     # Add cover
     if song_dict.get("thumbnail"):
         cover_file = download_file(song_dict["thumbnail"], f".TEMP/{sanitize(id)}.png")
         add_cover_art(ffmpeg_out,f".TEMP/{sanitize(id)}.png")
         os.remove(cover_file)
-    if callback: callback("cleaning")
+    if callback: callback("cleaning","status")
     os.remove(music_filename)
-    if callback: callback("done")
+    if callback: callback("done","status")

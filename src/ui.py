@@ -371,24 +371,31 @@ class MusicDownloaderApp(App):
         self.refresh_queue_ui()
         self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
 
-    def change_state(self,state,q_num,q_s_num):
-        if q_s_num is not None:
-            self.download_queue[q_num]["tracks"][q_s_num]["status"] = state
-            title = self.download_queue[q_num]["tracks"][q_s_num].get("title", "Unknown")
-        else:
-            self.download_queue[q_num]["status"] = state
-            title = self.download_queue[q_num].get("title", "Unknown")
-        
-        if self.cfg_dev_mode:
-            self.log_msg(f"Step: {state} -> {title}", "DEBUG")
+    def change_state(self,state,q_num,q_s_num, type="state"):
+        if type == "state":
+            if q_s_num is not None:
+                self.download_queue[q_num]["tracks"][q_s_num]["status"] = state
+                title = self.download_queue[q_num]["tracks"][q_s_num].get("title", "Unknown")
+            else:
+                self.download_queue[q_num]["status"] = state
+                title = self.download_queue[q_num].get("title", "Unknown")
 
-        self.refresh_queue_ui()
+            if self.cfg_dev_mode:
+                self.log_msg(f"Step: {state} -> {title}", "DEBUG")
+
+            self.refresh_queue_ui()
+        if type == "log":
+            if q_s_num is not None:title = self.download_queue[q_num]["tracks"][q_s_num].get("title", "Unknown")
+            else:title = self.download_queue[q_num].get("title", "Unknown")
+            if self.cfg_dev_mode:
+                self.log_msg(f"{state} -> {title}", "LOG")
+            self.refresh_queue_ui()
 
     def _download_wrapper(self,queue_num,queue_sub_num):
         self.log_msg(f"Started job {queue_sub_num} in {queue_num}","INFO")
         if queue_sub_num is not None:
             self.change_state("downloading", queue_num, queue_sub_num)
-            callback = lambda state: self.change_state(state, queue_num, queue_sub_num)
+            callback = lambda state,type="state": self.change_state(state, queue_num, queue_sub_num,type)
             folder_name = sanitize(self.download_queue[queue_num]["title"])
             try:
                 download_single(song_dict=self.download_queue[queue_num]["tracks"][queue_sub_num],folder_name=folder_name, callback=callback)
@@ -398,7 +405,7 @@ class MusicDownloaderApp(App):
                 raise e
         else:
             self.change_state("downloading",queue_num,queue_sub_num)
-            callback = lambda state: self.change_state(state,queue_num,queue_sub_num)
+            callback = lambda state, type="status": self.change_state(state,queue_num,queue_sub_num,type)
             try:
                 download_single(song_dict=self.download_queue[queue_num],callback=callback)
             except Exception as e:
