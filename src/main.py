@@ -4,10 +4,13 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+
 def install_and_restart():
     print("Detecting missing dependencies. Installing...")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "../requirements.txt"])
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", "../requirements.txt"]
+        )
         print("Installation successful! Restarting...")
 
         os.execl(sys.executable, sys.executable, *sys.argv)

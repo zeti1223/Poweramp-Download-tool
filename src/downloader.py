@@ -26,22 +26,53 @@ quality_map = {
     "MP3 320kbps": {"ext": "mp3", "codec": "libmp3lame", "bitrate": "320K"},
     "OGG": {"ext": "ogg", "codec": "libvorbis", "bitrate": "192K"},
     "M4A": {"ext": "m4a", "codec": "aac", "bitrate": "192K"},
-    "FLAC": {"ext": "flac", "codec": "flac", "bitrate": "0"}
+    "FLAC": {"ext": "flac", "codec": "flac", "bitrate": "0"},
 }
 tag_map = {
-    "mp3": {"handler": EasyID3,"title": "title","artist": "albumartist","album": "album","date": "date","track": "tracknumber"},
-    "m4a": {"handler": MP4,"title": "\xa9nam","artist": "\xa9ART","album": "\xa9alb","date": "\xa9day","track": "trkn"},
-    "ogg": {"handler": OggVorbis, "title": "TITLE", "artist": "ARTIST", "album": "ALBUM", "date": "DATE", "track": "TRACKNUMBER"},
-    "flac": {"handler": FLAC, "title": "TITLE", "artist": "ARTIST", "album": "ALBUM", "date": "DATE", "track": "TRACKNUMBER"}
+    "mp3": {
+        "handler": EasyID3,
+        "title": "title",
+        "artist": "albumartist",
+        "album": "album",
+        "date": "date",
+        "track": "tracknumber",
+    },
+    "m4a": {
+        "handler": MP4,
+        "title": "\xa9nam",
+        "artist": "\xa9ART",
+        "album": "\xa9alb",
+        "date": "\xa9day",
+        "track": "trkn",
+    },
+    "ogg": {
+        "handler": OggVorbis,
+        "title": "TITLE",
+        "artist": "ARTIST",
+        "album": "ALBUM",
+        "date": "DATE",
+        "track": "TRACKNUMBER",
+    },
+    "flac": {
+        "handler": FLAC,
+        "title": "TITLE",
+        "artist": "ARTIST",
+        "album": "ALBUM",
+        "date": "DATE",
+        "track": "TRACKNUMBER",
+    },
 }
+
 
 # Helper functions
 def check_network():
     is_online = ping3.ping("1.1.1.1")
     return is_online
 
+
 def sanitize(s):
-    return re.sub(r'[<>:"/\\|?*\']', '', s)
+    return re.sub(r'[<>:"/\\|?*\']', "", s)
+
 
 def download_file(url: str, save_path: str):
     if check_network():
@@ -54,8 +85,10 @@ def download_file(url: str, save_path: str):
     else:
         raise ConnectionError("Failure to download cover art!")
 
+
 def template_decoder(template, data: dict = None, magic_char: str = "$"):
-    if data is None: data = {}
+    if data is None:
+        data = {}
     final, opened, opened_keyword = "", False, ""
     for char in template:
         if not opened:
@@ -67,18 +100,23 @@ def template_decoder(template, data: dict = None, magic_char: str = "$"):
         if opened:
             if char == magic_char:
                 opened = False
-                final += str(data.get(opened_keyword, ''))
+                final += str(data.get(opened_keyword, ""))
                 opened_keyword = ""
             else:
                 opened_keyword += char
             continue
 
-    return re.sub(r'[<>:"/\\|?*\']', '', final).strip()
+    return re.sub(r'[<>:"/\\|?*\']', "", final).strip()
 
 
-def transcode_audio(input_file: str, output_path: str, filename: str,
-                    quality_preset: str = "MP3 256kbps", overwrite: bool = True):
-    
+def transcode_audio(
+    input_file: str,
+    output_path: str,
+    filename: str,
+    quality_preset: str = "MP3 256kbps",
+    overwrite: bool = True,
+):
+
     if not all([input_file, output_path, filename]):
         raise ValueError("Input file, output path, and filename are required.")
 
@@ -96,7 +134,9 @@ def transcode_audio(input_file: str, output_path: str, filename: str,
     bitrate = settings["bitrate"]
     codec = settings["codec"]
 
-    clean_filename = "".join([c for c in filename if c.isalnum() or c in (' ', '.', '_', '-')]).rstrip()
+    clean_filename = "".join(
+        [c for c in filename if c.isalnum() or c in (" ", ".", "_", "-")]
+    ).rstrip()
     output_file = os.path.join(output_path, f"{clean_filename}.{output_ext}")
 
     if os.path.exists(output_file) and not overwrite:
@@ -106,22 +146,27 @@ def transcode_audio(input_file: str, output_path: str, filename: str,
 
     command = [
         ffmpeg_path,
-        '-loglevel', 'quiet',
-        '-i', input_file,
-        '-c:a', codec,
+        "-loglevel",
+        "quiet",
+        "-i",
+        input_file,
+        "-c:a",
+        codec,
     ]
     if bitrate != "0":
-        command.extend(['-b:a', bitrate])
+        command.extend(["-b:a", bitrate])
     if overwrite:
-        command.append('-y')
+        command.append("-y")
     else:
-        command.append('-n')
+        command.append("-n")
     command.append(output_file)
     try:
         subprocess.run(command, check=True, capture_output=True, text=True)
         return output_file
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFmpeg process failed: {e.stderr}")
+
+
 def edit_audio_metadata(input_file: str, data: dict):
     if not input_file or not os.path.exists(input_file):
         raise FileNotFoundError(f"Input file not found: {input_file}")
@@ -135,7 +180,6 @@ def edit_audio_metadata(input_file: str, data: dict):
 
     mapping = tag_map[ext]
     audio = mapping["handler"](input_file)
-
 
     if ext == "m4a":
         if audio.tags is None:
@@ -196,6 +240,7 @@ def edit_audio_metadata(input_file: str, data: dict):
 
     return data
 
+
 def add_cover_art(audio_path: str, image_path: str):
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
@@ -213,13 +258,15 @@ def add_cover_art(audio_path: str, image_path: str):
         except Exception:
             audio = ID3()
 
-        audio.add(APIC(
-            encoding=3,
-            mime='image/png',
-            type=3,
-            desc='Front Cover',
-            data=image_data
-        ))
+        audio.add(
+            APIC(
+                encoding=3,
+                mime="image/png",
+                type=3,
+                desc="Front Cover",
+                data=image_data,
+            )
+        )
         audio.save(audio_path, v2_version=3)
 
     elif ext == "m4a":
@@ -246,7 +293,7 @@ def add_cover_art(audio_path: str, image_path: str):
         picture.mime = "image/png"
         picture.desc = "Front Cover"
 
-        picture_data = base64.b64encode(picture.write()).decode('ascii')
+        picture_data = base64.b64encode(picture.write()).decode("ascii")
         audio["metadata_block_picture"] = [picture_data]
         audio.save()
 
@@ -254,6 +301,7 @@ def add_cover_art(audio_path: str, image_path: str):
         raise ValueError(f"Unsupported format for cover art: {ext}")
 
     return True
+
 
 def spotify_get_initial(link):
     try:
@@ -267,40 +315,63 @@ def spotify_get_initial(link):
         if spotify_id is None:
             raise ValueError("Invalid spotify id given!")
 
-        with open("../config.json", "r") as f:config = json.load(f)
+        with open("../config.json", "r") as f:
+            config = json.load(f)
 
         if config["sp_id"] == "" or config["sp_sec"] == "":
             raise ValueError("No spotify tokens given!")
 
-
         return_dict = {}
-        client_credentials_mgmt = SpotifyClientCredentials(client_id=config["sp_id"],client_secret=config["sp_sec"])
+        client_credentials_mgmt = SpotifyClientCredentials(
+            client_id=config["sp_id"], client_secret=config["sp_sec"]
+        )
         sp = spotipy.Spotify(client_credentials_manager=client_credentials_mgmt)
         if "playlist/" in link:
             collection_data = sp.playlist(spotify_id)
 
             return_dict["tracks"] = []
             return_dict["title"] = collection_data.get("name", "Unknown title")
-            return_dict["thumbnail"] = collection_data.get("images", [])[0].get("url", None)
+            return_dict["thumbnail"] = collection_data.get("images", [])[0].get(
+                "url", None
+            )
             return_dict["type"] = "spotify"
             return_dict["item-type"] = "playlist"
 
             return_result = sp.playlist_items(spotify_id)
 
-            tracks = return_result['items']
-            while return_result['next']: return_result = sp.next(return_result); tracks.extend(return_result['items'])
+            tracks = return_result["items"]
+            while return_result["next"]:
+                return_result = sp.next(return_result)
+                tracks.extend(return_result["items"])
 
             for i, track in enumerate(tracks):
                 track_dict = {}
                 track_dict["title"] = track["track"].get("name", "Unknown title")
-                track_dict["artists"] = [i.get("name", "Unknown artist") for i in
-                                         track["track"].get("artists")] if track["track"].get(
-                    "artists") is not None else ["Unknown artist"]
-                track_dict["album"] = track["track"].get("album", {}).get("name", "Unknown album")
-                track_dict["duration_seconds"] = str(track["track"].get("duration_ms", 0) // 1000)
-                track_dict["release"] = track["track"].get("album", {}).get("release_date", None)
-                track_dict["release"] = track_dict["release"].split("-")[0] if track_dict["release"] else None
-                track_dict["thumbnail"] = track["track"]["album"]["images"][0].get("url", None)
+                track_dict["artists"] = (
+                    [
+                        i.get("name", "Unknown artist")
+                        for i in track["track"].get("artists")
+                    ]
+                    if track["track"].get("artists") is not None
+                    else ["Unknown artist"]
+                )
+                track_dict["album"] = (
+                    track["track"].get("album", {}).get("name", "Unknown album")
+                )
+                track_dict["duration_seconds"] = str(
+                    track["track"].get("duration_ms", 0) // 1000
+                )
+                track_dict["release"] = (
+                    track["track"].get("album", {}).get("release_date", None)
+                )
+                track_dict["release"] = (
+                    track_dict["release"].split("-")[0]
+                    if track_dict["release"]
+                    else None
+                )
+                track_dict["thumbnail"] = track["track"]["album"]["images"][0].get(
+                    "url", None
+                )
                 track_dict["track_number"] = i + 1
                 track_dict["status"] = "waiting"
                 track_dict["spotify_id"] = track["track"].get("id", None)
@@ -312,7 +383,9 @@ def spotify_get_initial(link):
 
             return_dict["tracks"] = []
             return_dict["title"] = collection_data.get("name", "Unknown title")
-            return_dict["thumbnail"] = collection_data.get("images", [])[0].get("url", None)
+            return_dict["thumbnail"] = collection_data.get("images", [])[0].get(
+                "url", None
+            )
             return_dict["type"] = "spotify"
             return_dict["spotify_id"] = spotify_id
             return_dict["item-type"] = "playlist"
@@ -320,14 +393,22 @@ def spotify_get_initial(link):
             for i, track in enumerate(collection_data["tracks"]["items"]):
                 track_dict = {}
                 track_dict["title"] = track.get("name", "Unknown title")
-                track_dict["artists"] = [i.get("name", "Unknown artist") for i in
-                                         track.get("artists")] if track.get(
-                    "artists") is not None else ["Unknown artist"]
+                track_dict["artists"] = (
+                    [i.get("name", "Unknown artist") for i in track.get("artists")]
+                    if track.get("artists") is not None
+                    else ["Unknown artist"]
+                )
                 track_dict["album"] = collection_data.get("name", "Unknown album")
-                track_dict["duration_seconds"] = str(track.get("duration_ms", 0) // 1000)
+                track_dict["duration_seconds"] = str(
+                    track.get("duration_ms", 0) // 1000
+                )
                 track_dict["release"] = collection_data.get("release_date", None)
-                track_dict["release"] = track_dict["release"].split("-")[0] if track_dict["release"] else None
-                track_dict["thumbnail"] = return_dict.get("thumbnail",None)
+                track_dict["release"] = (
+                    track_dict["release"].split("-")[0]
+                    if track_dict["release"]
+                    else None
+                )
+                track_dict["thumbnail"] = return_dict.get("thumbnail", None)
                 track_dict["track_number"] = i + 1
                 track_dict["status"] = "waiting"
                 track_dict["spotify_id"] = track.get("id", None)
@@ -337,14 +418,22 @@ def spotify_get_initial(link):
         if "track/" in link:
             track_data = sp.track(spotify_id)
 
-            return_dict["title"] =track_data.get("name", "Unknown title")
-            return_dict["album"] = track_data.get("album", {}).get("name", "Unknown album")
-            return_dict["artists"] = [i.get("name", "Unknown artist") for i in
-                                     track_data.get("artists")] if track_data.get(
-                "artists") is not None else ["Unknown artist"]
-            return_dict["duration_seconds"] = str(track_data.get("duration_ms", 0) // 1000)
+            return_dict["title"] = track_data.get("name", "Unknown title")
+            return_dict["album"] = track_data.get("album", {}).get(
+                "name", "Unknown album"
+            )
+            return_dict["artists"] = (
+                [i.get("name", "Unknown artist") for i in track_data.get("artists")]
+                if track_data.get("artists") is not None
+                else ["Unknown artist"]
+            )
+            return_dict["duration_seconds"] = str(
+                track_data.get("duration_ms", 0) // 1000
+            )
             return_dict["release"] = track_data["album"].get("release_date", None)
-            return_dict["release"] = return_dict["release"].split("-")[0] if return_dict["release"] else None
+            return_dict["release"] = (
+                return_dict["release"].split("-")[0] if return_dict["release"] else None
+            )
             return_dict["thumbnail"] = track_data["album"]["images"][0].get("url", None)
             return_dict["track_number"] = 1
             return_dict["status"] = "waiting"
@@ -355,6 +444,7 @@ def spotify_get_initial(link):
         return return_dict
     except Exception as e:
         raise e
+
 
 def youtube_get_initial(link):
     try:
@@ -372,18 +462,25 @@ def youtube_get_initial(link):
                 if len(youtube_id) != 11:
                     ValueError("Invalid youtube id given!")
                 data = yt_music_api.get_song(youtube_id)
-                return_dict["title"] = data["videoDetails"].get("title", "Unknown title")
+                return_dict["title"] = data["videoDetails"].get(
+                    "title", "Unknown title"
+                )
                 return_dict["album"] = "Unknown album"
-                return_dict["artists"] = data["videoDetails"].get("author", "Unknown artist").split("&")
+                return_dict["artists"] = (
+                    data["videoDetails"].get("author", "Unknown artist").split("&")
+                )
                 return_dict["release"] = None
-                return_dict["duration_seconds"] = data["videoDetails"].get("lengthSeconds", 0)
-                return_dict["thumbnail"] = data["videoDetails"]["thumbnail"]["thumbnails"][-1].get("url", None)
+                return_dict["duration_seconds"] = data["videoDetails"].get(
+                    "lengthSeconds", 0
+                )
+                return_dict["thumbnail"] = data["videoDetails"]["thumbnail"][
+                    "thumbnails"
+                ][-1].get("url", None)
                 return_dict["track_number"] = 1
                 return_dict["status"] = "waiting"
                 return_dict["youtube_id"] = youtube_id
                 return_dict["type"] = "youtube"
                 return_dict["item-type"] = "track"
-
 
             elif "?list=" in link:
                 youtube_id = link.split("/")[-1].split("?list=")[-1]
@@ -394,24 +491,38 @@ def youtube_get_initial(link):
 
                 data = yt_music_api.get_playlist(playlistId=youtube_id, limit=None)
                 return_dict["tracks"] = []
-                for i,track in enumerate(data["tracks"]):
+                for i, track in enumerate(data["tracks"]):
                     print(track)
                     try:
                         track_dict = {}
                         track_dict["title"] = track.get("title", "Unknown title")
-                        track_dict["artists"] = [i.get("name", "Unknown artist") for i in track.get("artists")] if track.get(
-                            "artists") is not None else ["Unknown artist"]
+                        track_dict["artists"] = (
+                            [
+                                i.get("name", "Unknown artist")
+                                for i in track.get("artists")
+                            ]
+                            if track.get("artists") is not None
+                            else ["Unknown artist"]
+                        )
 
-                        track_dict["album"] = track.get("album", {}).get("name", "Unknown album") if not track["album"] is None else "Unknown album"
+                        track_dict["album"] = (
+                            track.get("album", {}).get("name", "Unknown album")
+                            if not track["album"] is None
+                            else "Unknown album"
+                        )
 
                         track_dict["duration_seconds"] = track.get("duration", 0)
-                        track_dict["thumbnail"] = track.get("thumbnails")[0]["url"].split("=")[0] + "=w600-h600" if track.get(
-                            "thumbnails") is not None else None
+                        track_dict["thumbnail"] = (
+                            track.get("thumbnails")[0]["url"].split("=")[0]
+                            + "=w600-h600"
+                            if track.get("thumbnails") is not None
+                            else None
+                        )
                         track_dict["youtube_id"] = track["videoId"]
                         track_dict["type"] = "youtube"
                         track_dict["item-type"] = "track"
                         track_dict["release"] = None
-                        track_dict["track_number"] = i+1
+                        track_dict["track_number"] = i + 1
                         track_dict["status"] = "waiting"
                         return_dict["tracks"].append(track_dict)
 
@@ -427,30 +538,41 @@ def youtube_get_initial(link):
     except Exception as e:
         raise e
 
+
 def soundcloud_get_initial(link):
     pass
 
+
 # Download functions for service
 
-def download_spotify(song_dict,callback=None):
+
+def download_spotify(song_dict, callback=None):
     os.makedirs(".TEMP", exist_ok=True)
     search_query = f"{sanitize(' '.join(song_dict['artists']))} {song_dict['title']}"
     if not check_network():
         raise ConnectionError("No internet connection!")
     yt_music_api = ytmusicapi.YTMusic()
-    result_for_search = yt_music_api.search(search_query,filter="songs",limit=10)
+    result_for_search = yt_music_api.search(search_query, filter="songs", limit=10)
     video_id = None
     for i in result_for_search:
-        if str(i.get("artists",[{}])[0].get("name")).lower() in str(' '.join(song_dict['artists'])).lower():
-            video_id=i.get("videoId")
+        if (
+            str(i.get("artists", [{}])[0].get("name")).lower()
+            in str(" ".join(song_dict["artists"])).lower()
+        ):
+            video_id = i.get("videoId")
             break
     video_id = video_id if video_id is not None else result_for_search[0]["videoId"]
-    if callback: callback(f"Searched for {search_query}","log")
-    if callback: callback(f"Result is {result_for_search}","log")
-    if callback: callback(f"Final id {video_id}","log")
+    if callback:
+        callback(f"Searched for {search_query}", "log")
+    if callback:
+        callback(f"Result is {result_for_search}", "log")
+    if callback:
+        callback(f"Final id {video_id}", "log")
     result = download_youtube(video_id)
-    if callback: callback(f"Done {result}","log")
+    if callback:
+        callback(f"Done {result}", "log")
     return result["file_path"], result_for_search[0]["videoId"]
+
 
 def download_youtube(youtube_id):
     if not check_network():
@@ -460,25 +582,27 @@ def download_youtube(youtube_id):
     if len(youtube_id) != 11:
         ValueError("Invalid youtube id given!")
     ydl_config = {
-        'format': "bestaudio/best",
-        'outtmpl': f".TEMP/{youtube_id}.%(ext)s",
-        'quiet': True,
+        "format": "bestaudio/best",
+        "outtmpl": f".TEMP/{youtube_id}.%(ext)s",
+        "quiet": True,
     }
     try:
         with yt_dlp.YoutubeDL(ydl_config) as ydl:
             info = ydl.extract_info(f"https://music.youtube.com/watch?v={youtube_id}")
 
         audio_file = info["requested_downloads"][0]["filepath"]
-        title = sanitize(info.get('title', "Unknown Title"))
-        artist_list = info.get('artists', [info.get('uploader', "Unknown Artist")])
+        title = sanitize(info.get("title", "Unknown Title"))
+        artist_list = info.get("artists", [info.get("uploader", "Unknown Artist")])
         artist_str = sanitize(", ".join(artist_list))
-        album = sanitize(info.get('album', "Unknown Album"))
-        release_year = info.get('release_year') or int(info.get('upload_date', "20000000")[0:4] or 0)
-        length = info.get('duration', 0)
-        covers = info.get('thumbnails')
-        cover_url = info.get('thumbnail')
+        album = sanitize(info.get("album", "Unknown Album"))
+        release_year = info.get("release_year") or int(
+            info.get("upload_date", "20000000")[0:4] or 0
+        )
+        length = info.get("duration", 0)
+        covers = info.get("thumbnails")
+        cover_url = info.get("thumbnail")
         if covers and len(covers) > 2:
-            if covers[2].get('height', 1) == covers[2].get('width', 0):
+            if covers[2].get("height", 1) == covers[2].get("width", 0):
                 cover_url = covers[2]["url"]
 
         return {
@@ -492,12 +616,14 @@ def download_youtube(youtube_id):
             "cover_url": cover_url,
             "file_path": audio_file,
         }
-    except Exception as e: raise e
+    except Exception as e:
+        raise e
 
 
 # A wrapper function for all the download functions
 
-def download_single(song_dict:dict,folder_name:str = None, callback=None):
+
+def download_single(song_dict: dict, folder_name: str = None, callback=None):
     # Download initial file from service
     if song_dict["type"] == "youtube":
         result = download_youtube(song_dict["youtube_id"])
@@ -514,23 +640,39 @@ def download_single(song_dict:dict,folder_name:str = None, callback=None):
     with open("../config.json", "r") as f:
         config = json.load(f)
 
-    if folder_name is None:output_folder = config["path"]
+    if folder_name is None:
+        output_folder = config["path"]
     else:
         output_folder = os.path.join(config["path"], folder_name)
         os.makedirs(output_folder, exist_ok=True)
-    if callback: callback("transcoding","status")
-    templater_data = {"title": song_dict["title"],"artist":", ".join(song_dict["artists"]),"artists": song_dict["artists"],"album":song_dict["album"],"year":song_dict["release"],"length":song_dict["duration_seconds"],"platform":song_dict["type"],"track_number": int(song_dict["track_number"])}
+    if callback:
+        callback("transcoding", "status")
+    templater_data = {
+        "title": song_dict["title"],
+        "artist": ", ".join(song_dict["artists"]),
+        "artists": song_dict["artists"],
+        "album": song_dict["album"],
+        "year": song_dict["release"],
+        "length": song_dict["duration_seconds"],
+        "platform": song_dict["type"],
+        "track_number": int(song_dict["track_number"]),
+    }
     final_filename = template_decoder(config["filename_template"], data=templater_data)
     # Transcode
-    ffmpeg_out = transcode_audio(music_filename, output_folder,final_filename,quality_preset=config["quality"])
+    ffmpeg_out = transcode_audio(
+        music_filename, output_folder, final_filename, quality_preset=config["quality"]
+    )
     # Add text based metadata
-    if callback: callback("metadata","status")
-    edit_audio_metadata(ffmpeg_out,data=templater_data)
+    if callback:
+        callback("metadata", "status")
+    edit_audio_metadata(ffmpeg_out, data=templater_data)
     # Add cover
     if song_dict.get("thumbnail"):
         cover_file = download_file(song_dict["thumbnail"], f".TEMP/{sanitize(id)}.png")
-        add_cover_art(ffmpeg_out,f".TEMP/{sanitize(id)}.png")
+        add_cover_art(ffmpeg_out, f".TEMP/{sanitize(id)}.png")
         os.remove(cover_file)
-    if callback: callback("cleaning","status")
+    if callback:
+        callback("cleaning", "status")
     os.remove(music_filename)
-    if callback: callback("done","status")
+    if callback:
+        callback("done", "status")

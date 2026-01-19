@@ -1,8 +1,10 @@
 import os
 
+
 def update_folder_playlist(folder_path):
-    if not os.path.isdir(folder_path): return False
-    
+    if not os.path.isdir(folder_path):
+        return False
+
     audio_formats = {".mp3", ".flac", ".ogg", ".m4a"}
     audio_files = []
 
@@ -13,7 +15,8 @@ def update_folder_playlist(folder_path):
                 rel_path = os.path.relpath(full_path, folder_path)
                 audio_files.append(rel_path)
 
-    if not audio_files: return False
+    if not audio_files:
+        return False
 
     audio_files.sort()
     folder_name = os.path.basename(folder_path)
