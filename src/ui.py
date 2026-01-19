@@ -232,7 +232,10 @@ class MusicDownloaderApp(App):
     def refresh_queue_ui(self):
         if threading.get_ident() == self._thread_id:
             self._refresh_table()
-            self._update_progress_bar()
+            try:
+                self._update_progress_bar()
+            except Exception as e:
+                self.log_msg(e,"error")
         else:
             self.call_from_thread(self._refresh_table)
             self.call_from_thread(self._update_progress_bar)
