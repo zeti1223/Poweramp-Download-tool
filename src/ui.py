@@ -297,15 +297,21 @@ class MusicDownloaderApp(App):
             self.call_from_thread(self.query_one("#full_log", RichLog).write, msg)
 
     def refresh_queue_ui(self):
-        if threading.get_ident() == self._thread_id:
-            self._refresh_table()
-            try:
-                self._update_progress_bar()
-            except Exception as e:
-                self.log_msg(e, "error")
-        else:
-            self.call_from_thread(self._refresh_table)
-            self.call_from_thread(self._update_progress_bar)
+        try:
+            if threading.get_ident() == self._thread_id:
+                try:
+                    self._refresh_table()
+                    self._update_progress_bar()
+                except Exception as e:
+                    self.log_msg(e, "error")
+            else:
+                try:
+                    self.call_from_thread(self._refresh_table)
+                    self.call_from_thread(self._update_progress_bar)
+                except Exception as e:
+                    self.log_msg(e, "error")
+        except Exception as e:
+            self.log_msg(e, "error")
 
     def _update_progress_bar(self):
         try:
@@ -425,7 +431,7 @@ class MusicDownloaderApp(App):
         domain = link.removeprefix("https://").removeprefix("http://").split("/")[0]
         try:
             if "youtube.com" in domain or "youtu.be" in domain:
-                result_dict = youtube_get_initial(link)
+                result_dict = youtube_get_initial(link.split("&si=")[0])
                 self.download_queue.append(result_dict)
             elif "soundcloud.com" in domain:
                 self.notify("We are working on this platform", severity="warning")

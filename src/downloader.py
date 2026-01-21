@@ -1,7 +1,6 @@
 import subprocess
 import json
 import re
-import uuid
 
 import yt_dlp
 import ytmusicapi
@@ -17,6 +16,9 @@ from mutagen.oggvorbis import OggVorbis
 from mutagen.flac import FLAC, Picture
 import requests
 import base64
+
+import random
+import time
 
 # Constants
 
