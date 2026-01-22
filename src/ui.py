@@ -1,18 +1,32 @@
 import datetime
+import os
 from pathlib import Path
 
 from rich.text import Text
 from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Header, Footer, Button, Input, Label, TabbedContent, TabPane, RichLog, Select, DataTable, \
-    ProgressBar, Switch
+from textual.widgets import (
+    Header,
+    Footer,
+    Button,
+    Input,
+    Label,
+    TabbedContent,
+    TabPane,
+    RichLog,
+    Select,
+    DataTable,
+    ProgressBar,
+    Switch,
+)
 
 from consts import CONFIG_FILE
 from downloader import *
 from playlist import *
 from threader import *
 import threading
+
 
 class MusicDownloaderApp(App):
     CSS = """
@@ -66,12 +80,13 @@ class MusicDownloaderApp(App):
 
         self.thread_system = QueueSystem(max_processes=int(self.cfg_max_parallel))
 
-
     def compose(self) -> ComposeResult:
         yield Header()
         with TabbedContent():
             with TabPane("Queue & Download", id="tab_queue"):
-                yield Input(placeholder="Paste a link or search query...", id="link_entry")
+                yield Input(
+                    placeholder="Paste a link or search query...", id="link_entry"
+                )
                 with Horizontal(classes="controls"):
                     yield Button("Add", id="btn_add", variant="primary")
                     yield Button("Start All", id="btn_start", variant="success")
@@ -83,22 +98,51 @@ class MusicDownloaderApp(App):
                     yield ProgressBar(total=100, show_eta=True, id="overall_progress")
                 yield DataTable(id="queue_table")
             with TabPane("Detailed Log", id="tab_log"):
-                yield Button("Copy Log to Clipboard", id="btn_copy_log", classes="settings_field")
+                with Horizontal(classes="controls"):
+                    yield Button("Copy Log to Clipboard", id="btn_copy_log")
+                    yield Button("Clear Log", id="btn_clear_log", variant="error")
                 yield RichLog(id="full_log", markup=True)
             with TabPane("Settings", id="tab_settings"):
                 yield Label("Download Root Folder:", classes="settings_field")
-                yield Input(value=self.cfg_path, id="input_path", classes="settings_field")
-                yield Label("Filename Template:", id="lbl_template", classes="settings_field")
-                yield Input(value=self.cfg_template, id="template", classes="settings_field")
+                yield Input(
+                    value=self.cfg_path, id="input_path", classes="settings_field"
+                )
+                yield Label(
+                    "Filename Template:", id="lbl_template", classes="settings_field"
+                )
+                yield Input(
+                    value=self.cfg_template, id="template", classes="settings_field"
+                )
                 yield Label("Spotify Client ID:", classes="settings_field")
-                yield Input(value=self.cfg_sp_id, password=True, id="input_sp_id", classes="settings_field")
+                yield Input(
+                    value=self.cfg_sp_id,
+                    password=True,
+                    id="input_sp_id",
+                    classes="settings_field",
+                )
                 yield Label("Spotify Client Secret:", classes="settings_field")
-                yield Input(value=self.cfg_sp_sec, password=True, id="input_sp_sec", classes="settings_field")
+                yield Input(
+                    value=self.cfg_sp_sec,
+                    password=True,
+                    id="input_sp_sec",
+                    classes="settings_field",
+                )
                 yield Label("Format & Quality:", classes="settings_field")
                 options = [(k, k) for k in self.quality_map.keys()]
-                yield Select(options, value=self.cfg_quality, id="select_quality", allow_blank=False, classes="settings_field")
+                yield Select(
+                    options,
+                    value=self.cfg_quality,
+                    id="select_quality",
+                    allow_blank=False,
+                    classes="settings_field",
+                )
                 yield Label("Max Parallel Downloads (1-20):", classes="settings_field")
-                yield Input(value=self.cfg_max_parallel, id="input_parallel", classes="settings_field", type="integer")
+                yield Input(
+                    value=self.cfg_max_parallel,
+                    id="input_parallel",
+                    classes="settings_field",
+                    type="integer",
+                )
                 yield Label("Developer options:", classes="settings_field")
                 yield Switch(value=self.cfg_dev_mode, id="switch_dev")
                 yield Button("Save Settings", id="btn_save", variant="primary")
@@ -109,6 +153,7 @@ class MusicDownloaderApp(App):
         table.cursor_type = "row"
         table.add_columns("ID", "Status", "Name", "Folder")
         self.query_one("#btn_copy_log").display = self.cfg_dev_mode
+        self.query_one("#btn_clear_log").display = self.cfg_dev_mode
         self.query_one("#lbl_template").display = self.cfg_dev_mode
         self.query_one("#template").display = self.cfg_dev_mode
         self.log_msg("Application started.", "SYSTEM")
@@ -116,6 +161,7 @@ class MusicDownloaderApp(App):
     def action_paste_link(self):
         try:
             import pyperclip
+
             content = pyperclip.paste()
             if content:
                 inp = self.query_one("#link_entry", Input)
@@ -143,18 +189,28 @@ class MusicDownloaderApp(App):
     def on_switch_changed(self, event: Switch.Changed):
         if event.switch.id == "switch_dev":
             self.query_one("#btn_copy_log").display = event.value
+            self.query_one("#btn_clear_log").display = event.value
             self.query_one("#lbl_template").display = event.value
             self.query_one("#template").display = event.value
 
     def on_button_pressed(self, event: Button.Pressed):
         btn_id = event.button.id
-        if btn_id == "btn_add": self.add_to_queue_thread()
-        elif btn_id == "btn_start": self.start_downloads()
-        elif btn_id == "btn_pause": self.toggle_pause()
-        elif btn_id == "btn_abort": self.abort_process()
-        elif btn_id == "btn_clear": self.clear_queue_list()
-        elif btn_id == "btn_save": self.save_settings()
-        elif btn_id == "btn_copy_log": self.copy_log_to_clipboard()
+        if btn_id == "btn_add":
+            self.add_to_queue_thread()
+        elif btn_id == "btn_start":
+            self.start_downloads()
+        elif btn_id == "btn_pause":
+            self.toggle_pause()
+        elif btn_id == "btn_abort":
+            self.abort_process()
+        elif btn_id == "btn_clear":
+            self.clear_queue_list()
+        elif btn_id == "btn_save":
+            self.save_settings()
+        elif btn_id == "btn_copy_log":
+            self.copy_log_to_clipboard()
+        elif btn_id == "btn_clear_log":
+            self.clear_log()
 
     def load_settings(self):
         if os.path.exists(CONFIG_FILE):
@@ -166,9 +222,12 @@ class MusicDownloaderApp(App):
                     self.cfg_sp_sec = data.get("sp_sec", "")
                     self.cfg_quality = data.get("quality", "MP3 320kbps")
                     self.cfg_max_parallel = data.get("max_parallel", "1")
-                    self.cfg_template = data.get("filename_template", "$artist$ - $title$")
+                    self.cfg_template = data.get(
+                        "filename_template", "$artist$ - $title$"
+                    )
                     self.cfg_dev_mode = data.get("dev_mode", False)
-            except: pass
+            except:
+                pass
 
     def save_settings(self):
         self.cfg_path = self.query_one("#input_path", Input).value
@@ -189,41 +248,70 @@ class MusicDownloaderApp(App):
             "quality": self.cfg_quality,
             "max_parallel": self.cfg_max_parallel,
             "filename_template": self.cfg_template,
-            "dev_mode": self.cfg_dev_mode
+            "dev_mode": self.cfg_dev_mode,
         }
-        with open(CONFIG_FILE, "w") as f: json.dump(data, f, indent=4)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(data, f, indent=4)
         self.notify("Settings saved!")
 
     def copy_log_to_clipboard(self):
         try:
             import pyperclip
+
             content = "\n".join(self.log_history)
             pyperclip.copy(content)
             self.notify("Log copied to clipboard!")
         except ImportError:
-            self.notify("Please install 'pyperclip' module (pip install pyperclip)", severity="error")
+            self.notify(
+                "Please install 'pyperclip' module (pip install pyperclip)",
+                severity="error",
+            )
         except Exception as e:
-            self.notify(f"Clipboard error: {e}", severity="error")
+            self.notify(f"Clipboard error: {escape(str(e))}", severity="error")
+
+    def clear_log(self):
+        self.log_history.clear()
+        self.query_one("#full_log", RichLog).clear()
+        self.notify("Log cleared!")
 
     def log_msg(self, message, level="INFO"):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
         color = "white"
-        if level == "SUCCESS": color = "green"
-        elif level == "WARNING": color = "yellow"
-        elif level == "ERROR": color = "red"
-        elif level == "SYSTEM": color = "blue"
+        if level == "SUCCESS":
+            color = "green"
+        elif level == "WARNING":
+            color = "yellow"
+        elif level == "ERROR":
+            color = "red"
+        elif level == "SYSTEM":
+            color = "blue"
+        elif level == "DEBUG":
+            color = "purple"
         self.log_history.append(f"[{ts}] [{level}] {str(message)}")
-        msg = Text.from_markup(f"[{color}][{ts}] [{level}] {escape(str(message))}[/{color}]")
-        if threading.get_ident() == self._thread_id: self.query_one("#full_log", RichLog).write(msg)
-        else: self.call_from_thread(self.query_one("#full_log", RichLog).write, msg)
+        msg = Text.from_markup(
+            f"[{color}][{ts}] [{level}] {escape(str(message))}[/{color}]"
+        )
+        if threading.get_ident() == self._thread_id:
+            self.query_one("#full_log", RichLog).write(msg)
+        else:
+            self.call_from_thread(self.query_one("#full_log", RichLog).write, msg)
 
     def refresh_queue_ui(self):
-        if threading.get_ident() == self._thread_id:
-            self._refresh_table()
-            self._update_progress_bar()
-        else:
-            self.call_from_thread(self._refresh_table)
-            self.call_from_thread(self._update_progress_bar)
+        try:
+            if threading.get_ident() == self._thread_id:
+                try:
+                    self._refresh_table()
+                    self._update_progress_bar()
+                except Exception as e:
+                    self.log_msg(e, "error")
+            else:
+                try:
+                    self.call_from_thread(self._refresh_table)
+                    self.call_from_thread(self._update_progress_bar)
+                except Exception as e:
+                    self.log_msg(e, "error")
+        except Exception as e:
+            self.log_msg(e, "error")
 
     def _update_progress_bar(self):
         try:
@@ -232,15 +320,21 @@ class MusicDownloaderApp(App):
             total_tracks = 0
             done_tracks = 0
 
-            for folder in self.download_queue:
-                tracks = folder.get('tracks', [])
-                total_tracks += len(tracks)
-
-                for track in tracks:
-                    if track.get('status') in ('done', 'error'):
+            for item in self.download_queue:
+                if item.get("item-type") == "playlist":
+                    tracks = item.get("tracks", [])
+                    total_tracks += len(tracks)
+                    for track in tracks:
+                        if track.get("status") in ("done", "error"):
+                            done_tracks += 1
+                elif item.get("item-type") == "track":
+                    total_tracks += 1
+                    if item.get("status") in ("done", "error"):
                         done_tracks += 1
 
-            bar.update(total=total_tracks if total_tracks > 0 else 100, progress=done_tracks)
+            bar.update(
+                total=total_tracks if total_tracks > 0 else 100, progress=done_tracks
+            )
         except Exception as e:
             self.log_msg(f"Progress bar error: {e}", "ERROR")
 
@@ -248,39 +342,47 @@ class MusicDownloaderApp(App):
         table = self.query_one(DataTable)
         table.clear()
 
+        status_map = {
+            "waiting": "WAIT",
+            "downloading": "[blue]DOWNLOADING[/]",
+            "transcoding": "[magenta]TRANSCODING[/]",
+            "metadata": "[cyan]METADATA[/]",
+            "cleaning": "[blue]CLEANING[/]",
+            "done": "[green]DONE[/]",
+            "error": "[red]ERROR[/]",
+            "aborted": "[red]ABORTED[/]",
+            "paused": "[yellow]PAUSED[/]",
+        }
+
+        def get_status_styled(status):
+            if self.pause_requested and status == "waiting":
+                return "[yellow]PAUSED[/]"
+            return status_map.get(status, status)
+
         for item in self.download_queue:
             if item["item-type"] == "track":
-                status_styled = {
-                    "done": "[green]DONE[/]",
-                    "error": "[red]ERROR[/]",
-                    "working": "[blue]WORK[/]",
-                    "waiting": "WAIT"
-                }.get(item['status'], item['status'])
-
-                table.add_row(str(item['track_number']), status_styled, f"   {item['title']}", "")
+                status_styled = get_status_styled(item["status"])
+                table.add_row(
+                    str(item["track_number"]), status_styled, f"   {item['title']}", ""
+                )
             if item["item-type"] == "playlist":
-                title = item['title']
+                title = item["title"]
                 is_expanded = title in self.expanded_folders
                 icon = "📂" if is_expanded else "📁"
 
                 table.add_row(
-                    "",
-                    "",
-                    f"[bold yellow]{icon} {title}[/]",
-                    "",
-                    key=f"folder:{title}"
+                    "", "", f"[bold yellow]{icon} {title}[/]", "", key=f"folder:{title}"
                 )
 
                 if is_expanded:
-                    for track in item['tracks']:
-                        status_styled = {
-                            "done": "[green]DONE[/]",
-                            "error": "[red]ERROR[/]",
-                            "working": "[blue]WORK[/]",
-                            "waiting": "WAIT"
-                        }.get(track['status'], track['status'])
-
-                        table.add_row(str(track['track_number']), status_styled, f"   {track['title']}", title)
+                    for track in item["tracks"]:
+                        status_styled = get_status_styled(track["status"])
+                        table.add_row(
+                            str(track["track_number"]),
+                            status_styled,
+                            f"   {track['title']}",
+                            title,
+                        )
 
     def toggle_pause(self):
         if self.pause_requested:
@@ -291,6 +393,7 @@ class MusicDownloaderApp(App):
         btn = self.query_one("#btn_pause", Button)
         btn.label = "Resume" if self.pause_requested else "Pause"
         btn.variant = "primary" if self.pause_requested else "warning"
+        self.refresh_queue_ui()
 
     def abort_process(self):
         self.stop_requested = True
@@ -298,15 +401,27 @@ class MusicDownloaderApp(App):
         self.is_downloading = False
         self.log_msg("Aborted.", "SYSTEM")
 
+        for item in self.download_queue:
+            if item["item-type"] == "track":
+                if item["status"] not in ("done", "error"):
+                    item["status"] = "aborted"
+            elif item["item-type"] == "playlist":
+                for track in item["tracks"]:
+                    if track["status"] not in ("done", "error"):
+                        track["status"] = "aborted"
+        self.refresh_queue_ui()
+
     def clear_queue_list(self):
-        if self.is_downloading: return
+        if self.is_downloading:
+            return
         self.download_queue.clear()
         self.expanded_folders.clear()
         self.refresh_queue_ui()
 
     def add_to_queue_thread(self):
         link = self.query_one("#link_entry", Input).value.strip()
-        if not link: return
+        if not link:
+            return
         self.query_one("#btn_add", Button).disabled = True
         threading.Thread(target=self.process_input, args=(link,), daemon=True).start()
         self.query_one("#link_entry", Input).value = ""
@@ -316,7 +431,7 @@ class MusicDownloaderApp(App):
         domain = link.removeprefix("https://").removeprefix("http://").split("/")[0]
         try:
             if "youtube.com" in domain or "youtu.be" in domain:
-                result_dict = youtube_get_initial(link)
+                result_dict = youtube_get_initial(link.split("&si=")[0])
                 self.download_queue.append(result_dict)
             elif "soundcloud.com" in domain:
                 self.notify("We are working on this platform", severity="warning")
@@ -327,58 +442,127 @@ class MusicDownloaderApp(App):
                 self.notify("Creators: Zeti_1223 and SkyFonix")
             else:
                 self.log_msg(f"Error: service at {domain} is not supported!", "ERROR")
-                self.notify(f"Error: service at {domain} is not supported!", severity="error")
+                self.notify(
+                    f"Error: service at {escape(domain)} is not supported!",
+                    severity="error",
+                )
 
         except Exception as e:
             self.log_msg(f"Error: {e}", "ERROR")
-            self.notify(f"Error: {e}", severity="error")
+            self.notify(f"Error: {escape(str(e))}", severity="error")
 
         self.refresh_queue_ui()
-        self.call_from_thread(lambda: setattr(self.query_one("#btn_add", Button), "disabled", False))
+        self.call_from_thread(
+            lambda: setattr(self.query_one("#btn_add", Button), "disabled", False)
+        )
 
-    def change_state(self,state,q_num,q_s_num):
-        if q_s_num is not None:
-            self.download_queue[q_num][q_s_num]["state"] = state
-        else:
-            self.download_queue[q_num]["state"] = state
+    def change_state(self, state, q_num, q_s_num, type="state"):
+        if type == "state" or type == "status":
+            if q_s_num is not None:
+                self.download_queue[q_num]["tracks"][q_s_num]["status"] = state
+                title = self.download_queue[q_num]["tracks"][q_s_num].get(
+                    "title", "Unknown"
+                )
+            else:
+                self.download_queue[q_num]["status"] = state
+                title = self.download_queue[q_num].get("title", "Unknown")
 
-    def _download_wrapper(self,queue_num,queue_sub_num):
-        self.log_msg(f"Started job {queue_sub_num} in {queue_num}","INFO")
+            if self.cfg_dev_mode:
+                self.log_msg(f"Step: {state} -> {title}", "DEBUG")
+
+            self.refresh_queue_ui()
+        if type == "log":
+            if q_s_num is not None:
+                title = self.download_queue[q_num]["tracks"][q_s_num].get(
+                    "title", "Unknown"
+                )
+            else:
+                title = self.download_queue[q_num].get("title", "Unknown")
+            if self.cfg_dev_mode:
+                self.log_msg(f"{state} -> {title}", "LOG")
+            self.refresh_queue_ui()
+
+    def _download_wrapper(self, queue_num, queue_sub_num):
+        self.log_msg(f"Started job {queue_sub_num} in {queue_num}", "INFO")
         if queue_sub_num is not None:
             self.change_state("downloading", queue_num, queue_sub_num)
-            callback = lambda state: self.change_state(state, queue_num, queue_sub_num)
+            callback = lambda state, type="state": self.change_state(
+                state, queue_num, queue_sub_num, type
+            )
             folder_name = sanitize(self.download_queue[queue_num]["title"])
             try:
-                download_single(song_dict=self.download_queue[queue_num][queue_sub_num],folder_name=folder_name, callback=callback)
+                download_single(
+                    song_dict=self.download_queue[queue_num]["tracks"][queue_sub_num],
+                    folder_name=folder_name,
+                    callback=callback,
+                )
             except Exception as e:
+                self.log_msg(f"Download failed: {e}", "ERROR")
                 self.change_state("error", queue_num, queue_sub_num)
                 raise e
-        elif queue_num is None:
-            self.change_state("downloading",queue_num,queue_sub_num)
-            callback = lambda state: self.change_state(state,queue_num,queue_sub_num)
+        else:
+            self.change_state("downloading", queue_num, queue_sub_num)
+            callback = lambda state, type="status": self.change_state(
+                state, queue_num, queue_sub_num, type
+            )
             try:
-                download_single(song_dict=self.download_queue[queue_num],callback=callback)
+                download_single(
+                    song_dict=self.download_queue[queue_num], callback=callback
+                )
             except Exception as e:
+                self.log_msg(f"Download failed: {e}", "ERROR")
                 self.change_state("error", queue_num, queue_sub_num)
                 raise e
+
+    def _generate_playlists(self):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                download_path = config.get("path", self.cfg_path)
+        except Exception:
+            download_path = self.cfg_path
+
+        for item in self.download_queue:
+            if item.get("item-type") == "playlist":
+                folder_name = sanitize(item["title"])
+                full_path = os.path.join(download_path, folder_name)
+
+                if os.path.isdir(full_path):
+                    self.log_msg(f"Updating playlist for: {folder_name}", "INFO")
+                    if update_folder_playlist(full_path):
+                        self.log_msg(f"Playlist generated: {folder_name}", "SUCCESS")
+                    else:
+                        self.log_msg(
+                            f"No audio files found for playlist: {folder_name}",
+                            "WARNING",
+                        )
 
     def start_downloads(self):
 
         job_queue = []
 
-        for queue_num,data in enumerate(self.download_queue):
+        for queue_num, data in enumerate(self.download_queue):
             if data["item-type"] == "track":
                 if data["status"] == "waiting":
-                    job_queue.append(lambda q_num=queue_num: self._download_wrapper(q_num,None))
+                    job_queue.append(
+                        lambda q_num=queue_num: self._download_wrapper(q_num, None)
+                    )
                 self.log_msg(len(job_queue), "DEBUG")
             if data["item-type"] == "playlist":
                 for queue_sub_num, data2 in enumerate(data["tracks"]):
-                    if data["status"] == "waiting" or data["status"] == "error":
-                        job_queue.append(lambda q_num=queue_num,q_s_num=queue_sub_num: self._download_wrapper(q_num, queue_sub_num))
-        self.log_msg(job_queue,"DEBUG")
+                    if data2["status"] == "waiting" or data2["status"] == "error":
+                        job_queue.append(
+                            lambda q_num=queue_num, q_s_num=queue_sub_num: self._download_wrapper(
+                                q_num, q_s_num
+                            )
+                        )
+        self.log_msg(job_queue, "DEBUG")
         self.thread_system.submit_jobs(job_queue)
-        self.log_msg("Starting job queue","INFO")
-        t = threading.Thread(target=self.thread_system.wait_completion)
+        self.log_msg("Starting job queue", "INFO")
+
+        def run_after():
+            self.thread_system.wait_completion()
+            self._generate_playlists()
+
+        t = threading.Thread(target=run_after)
         t.start()
-
-

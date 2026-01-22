@@ -1,4 +1,4 @@
-import multiprocessing as mp
+import threading
 import queue
 import uuid
 import time
@@ -7,7 +7,7 @@ from typing import Callable, Iterable
 SEC_PER_CHECK = 2
 
 
-def worker_process(job_queue: mp.Queue, pause_event: mp.Event):
+def worker_process(job_queue: queue.Queue, pause_event: threading.Event):
     worker_id = uuid.uuid4()
 
     while True:
@@ -25,19 +25,21 @@ def worker_process(job_queue: mp.Queue, pause_event: mp.Event):
         try:
             job()
             print(f"{worker_id} completed a job")
+        except Exception as e:
+            print(f"{worker_id} error: {e}")
         finally:
             job_queue.task_done()
 
 
 class QueueSystem:
     def __init__(self, max_processes: int = 4):
-        self.job_queue = mp.JoinableQueue()
-        self.pause_event = mp.Event()
+        self.job_queue = queue.Queue()
+        self.pause_event = threading.Event()
         self.pause_event.set()
 
-        self.workers: list[mp.Process] = []
+        self.workers: list[threading.Thread] = []
         for _ in range(max_processes):
-            p = mp.Process(
+            p = threading.Thread(
                 target=worker_process,
                 args=(self.job_queue, self.pause_event),
                 daemon=True,
@@ -57,16 +59,11 @@ class QueueSystem:
 
     def abort(self, clear_queue: bool = True):
         """
-        Force-terminate all worker processes.
-        This WILL kill running jobs immediately.
+        Clears the queue.
+        Note: With threads, we cannot force-kill running jobs safely.
         """
-        # Kill workers
-        for p in self.workers:
-            if p.is_alive():
-                p.terminate()
-                p.join()
-
-        self.workers.clear()
+        # We cannot terminate threads easily like processes.
+        # We just clear the queue to stop new jobs.
 
         if clear_queue:
             while True:
